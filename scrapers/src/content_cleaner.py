@@ -69,8 +69,8 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-3-haiku-20240307",
-                    "max_tokens": 4096,
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 8192,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
