@@ -38,14 +38,15 @@ class FirecrawlClient:
 
             results = []
 
-            # firecrawl-py v4 returns a SearchData object with .data attribute
+            # firecrawl-py v4 SearchData has .web, .news, .images attributes
             items = []
-            if hasattr(response, 'data'):
-                items = response.data or []
-            elif isinstance(response, dict) and "data" in response:
-                items = response["data"]
-            elif isinstance(response, list):
-                items = response
+            if hasattr(response, 'web') and response.web:
+                items.extend(response.web)
+            if hasattr(response, 'news') and response.news:
+                items.extend(response.news)
+            # fallback for older versions
+            if not items and hasattr(response, 'data') and response.data:
+                items = response.data
 
             for item in items:
                 url = ""
@@ -55,7 +56,7 @@ class FirecrawlClient:
                 if hasattr(item, 'url'):
                     url = item.url or ""
                     title = item.title if hasattr(item, 'title') else ""
-                    content = item.markdown if hasattr(item, 'markdown') else (item.content if hasattr(item, 'content') else "")
+                    content = item.description if hasattr(item, 'description') else ""
                 elif isinstance(item, dict):
                     url = item.get("url", "")
                     title = item.get("title", "")
