@@ -1,4 +1,4 @@
-"""Firecrawl API client wrapper for web scraping."""
+"""Firecrawl API client wrapper for web scraping (firecrawl-py v4)."""
 
 import os
 import logging
@@ -34,22 +34,38 @@ class FirecrawlClient:
     def search(self, query: str, limit: int = 3) -> FirecrawlResponse:
         """Search the web and return scraped results."""
         try:
-            response = self.app.search(query, params={"limit": limit})
+            response = self.app.search(query, limit=limit)
 
             results = []
-            if isinstance(response, dict) and "data" in response:
+
+            # firecrawl-py v4 returns a SearchData object with .data attribute
+            items = []
+            if hasattr(response, 'data'):
+                items = response.data or []
+            elif isinstance(response, dict) and "data" in response:
                 items = response["data"]
             elif isinstance(response, list):
                 items = response
-            else:
-                items = []
 
             for item in items:
-                if isinstance(item, dict):
+                url = ""
+                title = ""
+                content = ""
+
+                if hasattr(item, 'url'):
+                    url = item.url or ""
+                    title = item.title if hasattr(item, 'title') else ""
+                    content = item.markdown if hasattr(item, 'markdown') else (item.content if hasattr(item, 'content') else "")
+                elif isinstance(item, dict):
+                    url = item.get("url", "")
+                    title = item.get("title", "")
+                    content = item.get("markdown", item.get("content", ""))
+
+                if url or content:
                     results.append(FirecrawlResult(
-                        url=item.get("url", ""),
-                        title=item.get("title", item.get("metadata", {}).get("title", "No title")),
-                        content=item.get("markdown", item.get("content", item.get("extract", ""))),
+                        url=url,
+                        title=title or url,
+                        content=content,
                         source_query=query,
                     ))
 
@@ -65,14 +81,17 @@ class FirecrawlClient:
     def scrape(self, url: str) -> FirecrawlResponse:
         """Scrape a single URL and return clean content."""
         try:
-            response = self.app.scrape_url(url)
+            response = self.app.scrape(url)
 
-            if isinstance(response, dict):
+            content = ""
+            title = url
+
+            if hasattr(response, 'markdown'):
+                content = response.markdown or ""
+                title = response.title if hasattr(response, 'title') else url
+            elif isinstance(response, dict):
                 content = response.get("markdown", response.get("content", ""))
                 title = response.get("metadata", {}).get("title", url)
-            else:
-                content = str(response)
-                title = url
 
             result = FirecrawlResult(url=url, title=title, content=content)
             return FirecrawlResponse(results=[result], credits_used=1)
