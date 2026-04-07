@@ -98,9 +98,13 @@ async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
     source_type = source.get("source_type", "news")
     url = source.get("url", "")
 
-    # Reddit gets native API treatment (Firecrawl blocks it)
     if "reddit.com" in url:
-        return await _scrape_reddit_source(brand, model, source)
+        # Try native API first, fallback to Firecrawl search-only
+        result = await _scrape_reddit_source(brand, model, source)
+        if result.status == "error" and "403" in (result.error or ""):
+            logger.warning(f"[{source.get('name')}] Reddit API blocked, using Firecrawl search fallback")
+            return await _scrape_reddit_via_firecrawl(brand, model, source)
+        return result
     elif source_type == "youtube":
         return await _scrape_youtube_source(brand, model, source)
     else:
@@ -279,6 +283,74 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
         )
     finally:
         await client.close()
+
+
+async def _scrape_reddit_via_firecrawl(brand: str, model: str, source: dict) -> SourceResult:
+    """Fallback: use Firecrawl search to find Reddit posts (no direct scrape needed)."""
+    start = time.time()
+    name = source.get("name", "Unknown")
+    url = source.get("url", "")
+    search_term = f"{brand} {model}".strip()
+
+    # Extract subreddit from URL
+    subreddit = "ItalyMotori"
+    if "/r/" in url:
+        parts = url.split("/r/")
+        if len(parts) > 1:
+            subreddit = parts[1].strip("/").split("/")[0]
+
+    try:
+        client = FirecrawlClient()
+    except ValueError as e:
+        return SourceResult(source=name, source_type="forum", status="error", error=str(e))
+
+    queries = [
+        f"site:reddit.com/r/{subreddit} {search_term}",
+        f"reddit {subreddit} {search_term} opinioni",
+    ]
+
+    all_items = []
+    total_credits = 0
+
+    for query in queries:
+        resp = client.search(query, limit=5)
+        total_credits += resp.credits_used
+
+        if resp.error:
+            logger.warning(f"[{name}] Firecrawl Reddit search error: {resp.error}")
+            continue
+
+        for r in resp.results:
+            if r.url and "reddit.com" in r.url and r.url not in [i["url"] for i in all_items]:
+                all_items.append({
+                    "url": r.url,
+                    "title": r.title or "",
+                    "content": (r.content or "")[:3000],
+                    "content_length": len(r.content or ""),
+                    "scraped": False,
+                })
+
+    # Run AI cleaning on the snippets
+    if all_items:
+        logger.warning(f"[{name}] Cleaning {len(all_items)} Reddit results with Claude AI")
+        combined_content = "\n\n---\n\n".join(
+            f"Post: {item['title']}\nURL: {item['url']}\n{item['content']}" for item in all_items
+        )
+        cleaned = await clean_and_extract(combined_content, name, f"reddit.com/r/{subreddit}")
+        if cleaned.get("cleaned") and cleaned.get("comments"):
+            # Add AI comments to the first item for display
+            all_items[0]["ai_comments"] = cleaned["comments"]
+            all_items[0]["ai_comment_count"] = cleaned["comment_count"]
+
+    return SourceResult(
+        source=name,
+        source_type="forum",
+        status="ok" if all_items else "partial",
+        result_count=len(all_items),
+        credits_used=total_credits,
+        items=all_items,
+        duration_ms=int((time.time() - start) * 1000),
+    )
 
 
 async def _scrape_youtube_source(brand: str, model: str, source: dict) -> SourceResult:
