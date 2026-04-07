@@ -60,7 +60,7 @@ async def run_scraping_test(
         for s in sources
     ]
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=180.0) as client:
         resp = await client.post(
             f"{SCRAPERS_URL}/scrape/test",
             json={
