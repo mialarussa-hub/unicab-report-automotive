@@ -10,33 +10,22 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
-EXTRACTION_PROMPT = """Sei un analista di contenuti automotive. Ti viene fornito il testo raw scrappato da una pagina web (forum o sito automotive).
+EXTRACTION_PROMPT = """Sei un analista di contenuti automotive. Analizza il testo scrappato da una pagina web e estrai TUTTI i commenti/opinioni degli utenti.
 
-COMPITO: Estrai TUTTI i commenti/opinioni degli utenti reali presenti nel testo. Non saltarne nessuno.
-
-IGNORA:
-- Navigazione, header, footer, sidebar, pubblicità
-- Link di paginazione, testo UI, cookie banner
-- Testo dell'articolo originale (tieni solo le REAZIONI degli utenti nei commenti)
-
-IMPORTANTE:
-- Estrai OGNI singolo commento presente, anche se breve
-- Se un utente scrive più paragrafi, uniscili in un unico commento
-- Il testo del commento deve essere il testo ORIGINALE dell'utente, non un riassunto
-- Se ci sono citazioni di altri utenti (quotes), includile nel contesto ma identifica chi sta parlando
+REGOLE:
+- Estrai OGNI commento di utente reale, non saltarne nessuno
+- IGNORA: navigazione, pubblicità, UI, testo articolo originale
+- RIASSUMI ogni commento in 1-2 frasi (NON copiare il testo integrale)
+- Cattura il SENSO del commento, non le parole esatte
 
 Per ogni commento restituisci:
-- "author": nome utente
-- "text": testo COMPLETO del commento (non riassumere, copia il testo originale)
-- "sentiment": "positivo", "negativo", "neutro" o "misto"
-- "topics": lista di argomenti (es. ["prezzo", "motore", "design", "affidabilità", "consumi", "cambio", "comfort", "qualità"])
+{{"author": "nome_utente", "text": "riassunto 1-2 frasi del commento", "sentiment": "positivo|negativo|neutro|misto", "topics": ["topic1", "topic2"]}}
 
-Restituisci SOLO un JSON array. Nessuna spiegazione. Se non trovi commenti: [].
+Topics possibili: prezzo, motore, design, affidabilità, consumi, cambio, comfort, qualità, spazio, tecnologia, assistenza, valore, guida, rumorosità, sicurezza
 
-Fonte: {source_name}
-URL: {url}
+Restituisci SOLO un JSON array. Se non trovi commenti: [].
 
---- CONTENUTO DA ANALIZZARE ---
+Fonte: {source_name} | URL: {url}
 
 {content}"""
 
