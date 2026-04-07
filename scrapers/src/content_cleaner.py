@@ -47,9 +47,8 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
     if not api_key:
         return {"comments": [], "comment_count": 0, "error": "ANTHROPIC_API_KEY not set", "cleaned": False}
 
-    # Claude 3 Haiku context: ~200k tokens. 1 token ≈ 4 chars.
-    # Send up to 80k chars (~20k tokens) to capture all comments
-    max_chars = 80000
+    # Claude 3 Haiku context: 200k tokens. Safe limit: 50k chars (~12k tokens)
+    max_chars = 50000
     truncated = content[:max_chars]
     if len(content) > max_chars:
         truncated += f"\n\n[... troncato, {len(content) - max_chars} caratteri rimanenti]"
@@ -75,7 +74,10 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                error_body = resp.text[:300]
+                logger.error(f"Claude API {resp.status_code} for {source_name}: {error_body}")
+                return {"comments": [], "comment_count": 0, "error": f"API {resp.status_code}: {error_body}", "cleaned": False}
             data = resp.json()
 
         # Extract the text response
