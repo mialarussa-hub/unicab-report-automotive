@@ -7,8 +7,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-REDDIT_BASE = "https://www.reddit.com"
-USER_AGENT = "UNICAB-Automotive-Scraper/1.0"
+REDDIT_BASE = "https://old.reddit.com"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 
 @dataclass
