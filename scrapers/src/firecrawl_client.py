@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 
 from firecrawl import FirecrawlApp
+from firecrawl.v2.types import ScrapeOptions
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,18 @@ class FirecrawlResponse:
     error: str | None = None
 
 
+# Scrape options for cleaner content
+SCRAPE_OPTIONS = ScrapeOptions(
+    only_main_content=True,
+    block_ads=True,
+    exclude_tags=["nav", "footer", "header", "aside", "script", "style", "iframe",
+                   ".cookie-banner", ".newsletter-signup", ".sidebar", ".advertisement",
+                   ".social-share", ".breadcrumb", ".pagination"],
+    formats=["markdown"],
+    timeout=15000,
+)
+
+
 class FirecrawlClient:
     def __init__(self):
         api_key = os.environ.get("FIRECRAWL_API_KEY", "")
@@ -38,13 +51,12 @@ class FirecrawlClient:
 
             results = []
 
-            # firecrawl-py v4 SearchData has .web, .news, .images attributes
+            # firecrawl-py v4 SearchData has .web, .news, .images
             items = []
             if hasattr(response, 'web') and response.web:
                 items.extend(response.web)
             if hasattr(response, 'news') and response.news:
                 items.extend(response.news)
-            # fallback for older versions
             if not items and hasattr(response, 'data') and response.data:
                 items = response.data
 
@@ -57,7 +69,6 @@ class FirecrawlClient:
                     url = (item.url or "") if hasattr(item, 'url') else ""
                     title = (item.title or "") if hasattr(item, 'title') else ""
                     content = (item.description or "") if hasattr(item, 'description') else ""
-                    # Also try markdown if description is empty
                     if not content and hasattr(item, 'markdown'):
                         content = item.markdown or ""
                 elif isinstance(item, dict):
@@ -83,9 +94,9 @@ class FirecrawlClient:
             return FirecrawlResponse(error=str(e))
 
     def scrape(self, url: str) -> FirecrawlResponse:
-        """Scrape a single URL and return clean content."""
+        """Scrape a single URL with clean content extraction."""
         try:
-            response = self.app.scrape(url)
+            response = self.app.scrape(url, scrape_options=SCRAPE_OPTIONS)
 
             content = ""
             title = url

@@ -120,9 +120,9 @@ function createResultItem(item, sourceType) {
     el.className = 'result-item';
 
     let title = item.title || item.url || 'Untitled';
-    let subtitle = '';
-    let content = '';
+    let subtitle = item.url || '';
     let badges = '';
+    let contentHtml = '';
 
     if (item.scraped) {
         badges += `<span class="scrape-badge full">Contenuto completo</span>`;
@@ -134,12 +134,26 @@ function createResultItem(item, sourceType) {
         badges += `<span class="length-badge">${formatNumber(item.content_length)} chars</span>`;
     }
 
-    if (item.comments && item.comments.length > 0) {
-        subtitle = item.channel ? `${item.channel} · ${formatNumber(item.view_count)} views · ${formatNumber(item.like_count)} likes` : (item.url || '');
-        content = (item.content || '') + '\n\n━━━ Commenti (' + item.comments.length + ') ━━━\n\n' + item.comments.map((c, i) => `💬 ${c}`).join('\n\n');
-    } else {
-        subtitle = item.url || '';
-        content = item.content || '';
+    if (item.ai_comments && item.ai_comments.length > 0) {
+        badges += `<span class="scrape-badge ai">${item.ai_comment_count} commenti AI</span>`;
+    }
+
+    // Build content display
+    // 1. AI-extracted comments (priority display)
+    if (item.ai_comments && item.ai_comments.length > 0) {
+        contentHtml = renderAiComments(item.ai_comments);
+    }
+    // 2. Reddit/YouTube comments
+    else if (item.comments && item.comments.length > 0) {
+        if (item.channel) {
+            subtitle = `${item.channel} · ${formatNumber(item.view_count)} views · ${formatNumber(item.like_count)} likes`;
+        }
+        const commentsText = item.comments.map(c => `💬 ${c}`).join('\n\n');
+        contentHtml = `<pre>${escapeHtml((item.content || '') + '\n\n━━━ Commenti (' + item.comments.length + ') ━━━\n\n' + commentsText)}</pre>`;
+    }
+    // 3. Raw content fallback
+    else {
+        contentHtml = `<pre>${escapeHtml(item.content || '')}</pre>`;
     }
 
     el.innerHTML = `
@@ -148,10 +162,32 @@ function createResultItem(item, sourceType) {
             <div class="item-badges">${badges}<span class="expand-icon">▼</span></div>
         </div>
         <div class="item-subtitle">${escapeHtml(subtitle)}</div>
-        <div class="item-content"><pre>${escapeHtml(content)}</pre></div>
+        <div class="item-content">${contentHtml}</div>
     `;
 
     return el;
+}
+
+function renderAiComments(comments) {
+    const SENTIMENT_ICONS = { positivo: '🟢', negativo: '🔴', neutro: '⚪', misto: '🟡' };
+
+    let html = '<div class="ai-comments">';
+    for (const c of comments) {
+        const icon = SENTIMENT_ICONS[c.sentiment] || '⚪';
+        const topics = (c.topics || []).map(t => `<span class="topic-tag">${escapeHtml(t)}</span>`).join(' ');
+        html += `
+            <div class="ai-comment">
+                <div class="ai-comment-header">
+                    <span class="sentiment-icon">${icon}</span>
+                    <strong>${escapeHtml(c.author || 'anonimo')}</strong>
+                    <span class="sentiment-label ${c.sentiment}">${c.sentiment}</span>
+                    ${topics}
+                </div>
+                <div class="ai-comment-text">${escapeHtml(c.text)}</div>
+            </div>`;
+    }
+    html += '</div>';
+    return html;
 }
 
 function formatNumber(n) {

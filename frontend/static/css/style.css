@@ -361,8 +361,59 @@ footer {
 }
 
 .scrape-badge.full { background: #d4edda; color: #155724; }
+.scrape-badge.ai { background: #e8d5f5; color: #6a1b9a; }
 .scrape-badge.snippet { background: #fff3cd; color: #856404; }
 .length-badge { background: #e8eaf6; color: #3949ab; }
+
+/* Sources page */
+/* AI Comments */
+.ai-comments { padding: 0.5rem 0; }
+
+.ai-comment {
+    padding: 0.8rem;
+    margin-bottom: 0.5rem;
+    background: #fafafa;
+    border-left: 3px solid #ddd;
+    border-radius: 0 4px 4px 0;
+}
+
+.ai-comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.4rem;
+    font-size: 0.85rem;
+}
+
+.sentiment-icon { font-size: 0.9rem; }
+
+.sentiment-label {
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.sentiment-label.positivo { background: #d4edda; color: #155724; }
+.sentiment-label.negativo { background: #f8d7da; color: #721c24; }
+.sentiment-label.neutro { background: #e2e3e5; color: #383d41; }
+.sentiment-label.misto { background: #fff3cd; color: #856404; }
+
+.topic-tag {
+    display: inline-block;
+    padding: 0.05rem 0.35rem;
+    background: #e3f2fd;
+    color: #1565c0;
+    border-radius: 6px;
+    font-size: 0.6rem;
+}
+
+.ai-comment-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #333;
+}
 
 /* Sources page */
 .sources-page h1 { margin-bottom: 0.3rem; }

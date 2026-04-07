@@ -1,4 +1,4 @@
-"""Scraping test orchestrator — 2-step: search URLs then scrape full content."""
+"""Scraping test orchestrator — 3-step: search → scrape → clean with AI."""
 
 import asyncio
 import time
@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, asdict
 from src.firecrawl_client import FirecrawlClient
 from src.youtube_client import YouTubeClient
 from src.reddit_client import RedditClient
+from src.content_cleaner import clean_and_extract
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,18 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
             "content_length": len(full_content),
             "scraped": True,
         })
+
+    # --- STEP 3: Clean with Claude AI ---
+    logger.warning(f"[{name}] STEP 3: cleaning {len(items)} pages with Claude AI")
+    for item in items:
+        if item.get("scraped") and len(item.get("content", "")) > 200:
+            cleaned = await clean_and_extract(item["content"], name, item["url"])
+            if cleaned.get("cleaned") and cleaned.get("comments"):
+                item["ai_comments"] = cleaned["comments"]
+                item["ai_comment_count"] = cleaned["comment_count"]
+                logger.warning(f"[{name}] AI extracted {cleaned['comment_count']} comments from {item['url']}")
+            elif cleaned.get("error"):
+                logger.warning(f"[{name}] AI cleaning error: {cleaned['error']}")
 
     total_credits = search_credits + scrape_credits
     duration = int((time.time() - start) * 1000)
