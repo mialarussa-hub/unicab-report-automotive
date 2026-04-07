@@ -10,45 +10,46 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
-EXTRACTION_PROMPT = """Sei un analista di contenuti automotive. Ti viene fornito il testo raw scrappato da una pagina web di un forum o sito automotive.
+EXTRACTION_PROMPT = """Sei un analista di contenuti automotive. Ti viene fornito il testo raw scrappato da una pagina web (forum o sito automotive).
 
-Il tuo compito è estrarre SOLO i commenti/opinioni degli utenti reali, ignorando:
-- Navigazione del sito, header, footer, sidebar
-- Pubblicità e banner
-- Link di paginazione
-- Quote di articoli giornalistici (tieni solo le reazioni degli utenti)
-- Testo UI (pulsanti, menu, cookie banner)
+COMPITO: Estrai TUTTI i commenti/opinioni degli utenti reali presenti nel testo. Non saltarne nessuno.
 
-Per ogni commento trovato, restituisci un oggetto JSON con:
-- "author": nome utente (se disponibile, altrimenti "anonimo")
-- "text": il testo del commento pulito
+IGNORA:
+- Navigazione, header, footer, sidebar, pubblicità
+- Link di paginazione, testo UI, cookie banner
+- Testo dell'articolo originale (tieni solo le REAZIONI degli utenti nei commenti)
+
+IMPORTANTE:
+- Estrai OGNI singolo commento presente, anche se breve
+- Se un utente scrive più paragrafi, uniscili in un unico commento
+- Il testo del commento deve essere il testo ORIGINALE dell'utente, non un riassunto
+- Se ci sono citazioni di altri utenti (quotes), includile nel contesto ma identifica chi sta parlando
+
+Per ogni commento restituisci:
+- "author": nome utente
+- "text": testo COMPLETO del commento (non riassumere, copia il testo originale)
 - "sentiment": "positivo", "negativo", "neutro" o "misto"
-- "topics": lista di argomenti trattati (es. ["prezzo", "motore", "design", "affidabilità"])
+- "topics": lista di argomenti (es. ["prezzo", "motore", "design", "affidabilità", "consumi", "cambio", "comfort", "qualità"])
 
-Restituisci SOLO un JSON array. Se non trovi commenti utente, restituisci [].
-NON includere spiegazioni, solo il JSON.
+Restituisci SOLO un JSON array. Nessuna spiegazione. Se non trovi commenti: [].
 
-Testo da analizzare (fonte: {source_name}, URL: {url}):
+Fonte: {source_name}
+URL: {url}
+
+--- CONTENUTO DA ANALIZZARE ---
 
 {content}"""
 
 
 async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
-    """Use Claude to extract clean comments and sentiment from raw scraped content.
-
-    Returns:
-        dict with keys:
-        - "comments": list of extracted comments with sentiment
-        - "comment_count": number of comments found
-        - "error": error message if any
-        - "cleaned": True if cleaning was applied
-    """
+    """Use Claude to extract clean comments and sentiment from raw scraped content."""
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {"comments": [], "comment_count": 0, "error": "ANTHROPIC_API_KEY not set", "cleaned": False}
 
-    # Truncate content to avoid token limits (Claude Haiku handles ~100k tokens)
-    max_chars = 15000
+    # Claude 3 Haiku context: ~200k tokens. 1 token ≈ 4 chars.
+    # Send up to 80k chars (~20k tokens) to capture all comments
+    max_chars = 80000
     truncated = content[:max_chars]
     if len(content) > max_chars:
         truncated += f"\n\n[... troncato, {len(content) - max_chars} caratteri rimanenti]"
@@ -60,7 +61,7 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
     )
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 ANTHROPIC_API_URL,
                 headers={
@@ -70,7 +71,7 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
                 },
                 json={
                     "model": "claude-3-haiku-20240307",
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
@@ -85,7 +86,6 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
 
         # Parse JSON from response
         response_text = response_text.strip()
-        # Handle markdown code blocks
         if response_text.startswith("```"):
             lines = response_text.split("\n")
             response_text = "\n".join(lines[1:-1]) if len(lines) > 2 else response_text

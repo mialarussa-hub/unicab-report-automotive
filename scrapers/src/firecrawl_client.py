@@ -24,13 +24,12 @@ class FirecrawlResponse:
     error: str | None = None
 
 
-# Scrape keyword arguments for cleaner content
+# Scrape options: do NOT use only_main_content (it cuts off forum comments)
 SCRAPE_KWARGS = {
-    "only_main_content": True,
     "block_ads": True,
-    "exclude_tags": ["nav", "footer", "header", "aside", "script", "style", "iframe"],
+    "exclude_tags": ["script", "style", "iframe", ".cookie-banner", ".advertisement"],
     "formats": ["markdown"],
-    "timeout": 15000,
+    "timeout": 20000,
 }
 
 
