@@ -32,18 +32,11 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
     resultsMeta.style.display = 'none';
 
     try {
-        // Get JWT token from cookie
-        const token = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('access_token='))
-            ?.split('=')[1];
-
+        // Cookie is sent automatically (httponly), no need for Authorization header
         const resp = await fetch('/api/scraping-test/run', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({ brand, model }),
         });
 
