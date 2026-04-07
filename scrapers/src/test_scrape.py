@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, asdict
 
 from src.firecrawl_client import FirecrawlClient
 from src.youtube_client import YouTubeClient
+from src.reddit_client import RedditClient
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +93,14 @@ async def run_test_scrape(brand: str, model: str = "", sources: list[dict] = Non
 
 
 async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
-    """Route to the right scraper based on source type."""
+    """Route to the right scraper based on source type and URL."""
     source_type = source.get("source_type", "news")
-    if source_type == "youtube":
+    url = source.get("url", "")
+
+    # Reddit gets native API treatment (Firecrawl blocks it)
+    if "reddit.com" in url:
+        return await _scrape_reddit_source(brand, model, source)
+    elif source_type == "youtube":
         return await _scrape_youtube_source(brand, model, source)
     else:
         return await _scrape_web_source(brand, model, source)
@@ -195,6 +201,71 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
         items=items,
         duration_ms=duration,
     )
+
+
+async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceResult:
+    """Scrape Reddit via native JSON API (free, no Firecrawl needed)."""
+    start = time.time()
+    name = source.get("name", "Unknown")
+    url = source.get("url", "")
+
+    # Extract subreddit from URL (e.g. "reddit.com/r/ItalyMotori" -> "ItalyMotori")
+    subreddit = "ItalyMotori"  # default
+    if "/r/" in url:
+        parts = url.split("/r/")
+        if len(parts) > 1:
+            subreddit = parts[1].strip("/").split("/")[0]
+
+    client = RedditClient()
+    try:
+        search_term = f"{brand} {model}".strip()
+        response = await client.collect(subreddit, search_term, max_posts=5, max_comments=20)
+
+        if response.error:
+            return SourceResult(
+                source=name, source_type="forum", status="error",
+                error=response.error, duration_ms=int((time.time() - start) * 1000),
+            )
+
+        items = []
+        for post in response.posts:
+            # Build content: post text + all comments
+            content_parts = []
+            if post.selftext:
+                content_parts.append(post.selftext)
+
+            if post.comments:
+                content_parts.append(f"\n--- {len(post.comments)} commenti ---\n")
+                for c in post.comments:
+                    content_parts.append(f"[{c.author}] (score: {c.score}): {c.text}")
+
+            full_content = "\n\n".join(content_parts)
+
+            items.append({
+                "url": post.url,
+                "title": f"{post.title} (score: {post.score}, {post.num_comments} commenti)",
+                "content": full_content[:5000],
+                "content_length": len(full_content),
+                "comments": [f"[{c.author}]: {c.text}" for c in post.comments[:15]],
+                "scraped": True,
+            })
+
+        return SourceResult(
+            source=name,
+            source_type="forum",
+            status="ok" if items else "partial",
+            result_count=len(items),
+            credits_used=0,  # Reddit API is free
+            items=items,
+            duration_ms=int((time.time() - start) * 1000),
+        )
+    except Exception as e:
+        return SourceResult(
+            source=name, source_type="forum", status="error",
+            error=str(e), duration_ms=int((time.time() - start) * 1000),
+        )
+    finally:
+        await client.close()
 
 
 async def _scrape_youtube_source(brand: str, model: str, source: dict) -> SourceResult:
