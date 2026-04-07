@@ -1,6 +1,6 @@
 """Reddit scraper for automotive subreddits sentiment."""
 
-from scrapers.src.base import BaseScraper
+from src.base import BaseScraper
 
 
 class RedditScraper(BaseScraper):

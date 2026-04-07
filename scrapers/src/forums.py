@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass, field
 
-from scrapers.src.firecrawl_client import FirecrawlClient, FirecrawlResult
+from src.firecrawl_client import FirecrawlClient, FirecrawlResult
 
 logger = logging.getLogger(__name__)
 

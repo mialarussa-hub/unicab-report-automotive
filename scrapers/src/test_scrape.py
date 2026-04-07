@@ -5,10 +5,10 @@ import time
 import logging
 from dataclasses import dataclass, field, asdict
 
-from scrapers.src.forums import scrape_forums
-from scrapers.src.youtube import scrape_youtube
-from scrapers.src.facebook_ads import scrape_facebook_ads
-from scrapers.src.google_ads import scrape_google_ads
+from src.forums import scrape_forums
+from src.youtube import scrape_youtube
+from src.facebook_ads import scrape_facebook_ads
+from src.google_ads import scrape_google_ads
 
 logger = logging.getLogger(__name__)
 

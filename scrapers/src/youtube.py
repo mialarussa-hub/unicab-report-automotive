@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass, field
 
-from scrapers.src.youtube_client import YouTubeClient
+from src.youtube_client import YouTubeClient
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from scrapers.src.test_scrape import run_test_scrape
+from src.test_scrape import run_test_scrape
 
 app = FastAPI(title="UNICAB Scrapers", docs_url="/docs")
 
@@ -28,7 +28,7 @@ async def scrape_test(request: ScrapeTestRequest):
 @app.post("/scrape/forums")
 async def scrape_forums_endpoint(brand: str = "", model: str = ""):
     """Trigger forum scraping for a specific brand."""
-    from scrapers.src.forums import scrape_forums
+    from src.forums import scrape_forums
     from dataclasses import asdict
     result = await scrape_forums(brand, model)
     return asdict(result)
@@ -37,7 +37,7 @@ async def scrape_forums_endpoint(brand: str = "", model: str = ""):
 @app.post("/scrape/youtube")
 async def scrape_youtube_endpoint(brand: str = "", model: str = ""):
     """Trigger YouTube sentiment collection."""
-    from scrapers.src.youtube import scrape_youtube
+    from src.youtube import scrape_youtube
     from dataclasses import asdict
     result = await scrape_youtube(brand, model)
     return asdict(result)
