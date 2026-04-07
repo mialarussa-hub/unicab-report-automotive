@@ -1,0 +1,112 @@
+"""Frontend routes — serves Jinja2 templates for the web viewer."""
+
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Request, Form, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import verify_password, create_access_token
+from app.database import get_db
+from app.models.user import User
+from app.models.report import Report
+
+router = APIRouter()
+
+templates_dir = Path(__file__).parent.parent.parent.parent / "frontend" / "templates"
+templates = Jinja2Templates(directory=str(templates_dir))
+
+
+@router.get("/", response_class=HTMLResponse)
+async def frontend_root(request: Request):
+    return RedirectResponse(url="/frontend/login")
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+
+@router.post("/login", response_class=HTMLResponse)
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == username))
+    user = result.scalar_one_or_none()
+
+    if not user or not verify_password(password, user.hashed_password):
+        return templates.TemplateResponse(
+            "login.html", {"request": request, "error": "Email o password non validi"}
+        )
+
+    token = create_access_token(data={"sub": str(user.id)})
+    response = RedirectResponse(url="/frontend/dashboard", status_code=303)
+    response.set_cookie(key="access_token", value=token, httponly=True)
+    return response
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
+    # TODO: proper cookie-based auth middleware
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/frontend/login")
+
+    from app.core.security import decode_access_token
+    import uuid
+
+    payload = decode_access_token(token)
+    if not payload:
+        return RedirectResponse(url="/frontend/login")
+
+    result = await db.execute(select(User).where(User.id == uuid.UUID(payload["sub"])))
+    user = result.scalar_one_or_none()
+    if not user:
+        return RedirectResponse(url="/frontend/login")
+
+    reports_result = await db.execute(select(Report).order_by(Report.reference_month.desc()))
+    reports = reports_result.scalars().all()
+
+    return templates.TemplateResponse(
+        "dashboard.html", {"request": request, "user": user, "reports": reports}
+    )
+
+
+@router.get("/report/{report_id}", response_class=HTMLResponse)
+async def view_report(request: Request, report_id: str, db: AsyncSession = Depends(get_db)):
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/frontend/login")
+
+    from app.core.security import decode_access_token
+    import uuid
+
+    payload = decode_access_token(token)
+    if not payload:
+        return RedirectResponse(url="/frontend/login")
+
+    result = await db.execute(select(User).where(User.id == uuid.UUID(payload["sub"])))
+    user = result.scalar_one_or_none()
+    if not user:
+        return RedirectResponse(url="/frontend/login")
+
+    report_result = await db.execute(select(Report).where(Report.id == report_id))
+    report = report_result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report non trovato")
+
+    return templates.TemplateResponse(
+        "report_viewer.html", {"request": request, "user": user, "report": report}
+    )
+
+
+@router.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/frontend/login")
+    response.delete_cookie("access_token")
+    return response

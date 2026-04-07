@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}UNICAB Report Automotive{% endblock %}</title>
+    <link rel="stylesheet" href="/frontend/static/css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">UNICAB Report Automotive</div>
+            {% if user %}
+            <div class="nav-links">
+                <a href="/frontend/dashboard">Dashboard</a>
+                <span>{{ user.full_name }}</span>
+                <a href="/frontend/logout">Logout</a>
+            </div>
+            {% endif %}
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>&copy; 2026 UNICAB Italia S.r.l.</p>
+    </footer>
+</body>
+</html>

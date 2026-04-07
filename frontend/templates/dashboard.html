@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — UNICAB{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>Dashboard</h1>
+    <section class="reports-list">
+        <h2>Report</h2>
+        {% if reports %}
+        <ul>
+            {% for report in reports %}
+            <li>
+                <a href="/frontend/report/{{ report.id }}">
+                    <strong>{{ report.title }}</strong>
+                    <span class="status {{ report.status }}">{{ report.status }}</span>
+                    <span class="date">{{ report.reference_month }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>Nessun report disponibile.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

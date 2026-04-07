@@ -1,0 +1,17 @@
+[project]
+name = "unicab-scrapers"
+version = "0.1.0"
+description = "UNICAB Report Automotive — Scrapers & Data Collection"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "httpx>=0.28.0",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "pydantic>=2.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
