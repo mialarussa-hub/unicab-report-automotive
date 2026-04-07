@@ -122,24 +122,30 @@ function createResultItem(item, sourceType) {
     let title = item.title || item.url || 'Untitled';
     let subtitle = '';
     let content = '';
+    let badges = '';
 
-    if (sourceType === 'youtube') {
-        subtitle = `${item.channel} · ${formatNumber(item.view_count)} views · ${formatNumber(item.like_count)} likes`;
-        content = item.description || '';
-        if (item.comments && item.comments.length > 0) {
-            content += '\n\n--- Commenti ---\n' + item.comments.map((c, i) => `${i + 1}. ${c}`).join('\n');
-        }
+    if (item.scraped) {
+        badges += `<span class="scrape-badge full">Contenuto completo</span>`;
+    } else {
+        badges += `<span class="scrape-badge snippet">Solo snippet</span>`;
+    }
+
+    if (item.content_length) {
+        badges += `<span class="length-badge">${formatNumber(item.content_length)} chars</span>`;
+    }
+
+    if (item.comments && item.comments.length > 0) {
+        subtitle = item.channel ? `${item.channel} · ${formatNumber(item.view_count)} views · ${formatNumber(item.like_count)} likes` : (item.url || '');
+        content = (item.content || '') + '\n\n━━━ Commenti (' + item.comments.length + ') ━━━\n\n' + item.comments.map((c, i) => `💬 ${c}`).join('\n\n');
     } else {
         subtitle = item.url || '';
         content = item.content || '';
     }
 
-    const isPriority = item.is_priority ? '<span class="priority-badge">Forum noto</span>' : '';
-
     el.innerHTML = `
         <div class="item-header" onclick="this.parentElement.classList.toggle('expanded')">
-            <strong>${escapeHtml(title)}</strong> ${isPriority}
-            <span class="expand-icon">▼</span>
+            <strong>${escapeHtml(title)}</strong>
+            <div class="item-badges">${badges}<span class="expand-icon">▼</span></div>
         </div>
         <div class="item-subtitle">${escapeHtml(subtitle)}</div>
         <div class="item-content"><pre>${escapeHtml(content)}</pre></div>

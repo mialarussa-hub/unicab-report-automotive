@@ -350,6 +350,20 @@ footer {
     margin-top: 1rem;
 }
 
+.item-badges { display: flex; align-items: center; gap: 0.4rem; }
+
+.scrape-badge, .length-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.scrape-badge.full { background: #d4edda; color: #155724; }
+.scrape-badge.snippet { background: #fff3cd; color: #856404; }
+.length-badge { background: #e8eaf6; color: #3949ab; }
+
 /* Sources page */
 .sources-page h1 { margin-bottom: 0.3rem; }
 .sources-page .subtitle { color: #666; margin-bottom: 1.5rem; }
