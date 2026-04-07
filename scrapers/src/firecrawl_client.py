@@ -41,10 +41,14 @@ class FirecrawlClient:
             raise ValueError("FIRECRAWL_API_KEY not set")
         self.app = FirecrawlApp(api_key=api_key)
 
-    def search(self, query: str, limit: int = 3) -> FirecrawlResponse:
+    def search(self, query: str, limit: int = 3, recent_only: bool = True) -> FirecrawlResponse:
         """Search the web and return scraped results."""
         try:
-            response = self.app.search(query, limit=limit)
+            # tbs="qdr:y" = last year, "qdr:m6" = last 6 months
+            kwargs = {"limit": limit}
+            if recent_only:
+                kwargs["tbs"] = "qdr:y"
+            response = self.app.search(query, **kwargs)
 
             results = []
 
