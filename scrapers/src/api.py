@@ -8,9 +8,16 @@ from src.test_scrape import run_test_scrape
 app = FastAPI(title="UNICAB Scrapers", docs_url="/docs")
 
 
+class SourceConfig(BaseModel):
+    name: str
+    url: str
+    source_type: str  # forum, news, youtube, social
+
+
 class ScrapeTestRequest(BaseModel):
     brand: str
     model: str = ""
+    sources: list[SourceConfig] = []
 
 
 @app.get("/health")
@@ -20,24 +27,7 @@ async def health():
 
 @app.post("/scrape/test")
 async def scrape_test(request: ScrapeTestRequest):
-    """Run all scrapers in parallel and return aggregated results."""
-    result = await run_test_scrape(request.brand, request.model)
+    """Run scrapers using configured sources."""
+    sources_dicts = [s.model_dump() for s in request.sources]
+    result = await run_test_scrape(request.brand, request.model, sources_dicts)
     return result
-
-
-@app.post("/scrape/forums")
-async def scrape_forums_endpoint(brand: str = "", model: str = ""):
-    """Trigger forum scraping for a specific brand."""
-    from src.forums import scrape_forums
-    from dataclasses import asdict
-    result = await scrape_forums(brand, model)
-    return asdict(result)
-
-
-@app.post("/scrape/youtube")
-async def scrape_youtube_endpoint(brand: str = "", model: str = ""):
-    """Trigger YouTube sentiment collection."""
-    from src.youtube import scrape_youtube
-    from dataclasses import asdict
-    result = await scrape_youtube(brand, model)
-    return asdict(result)

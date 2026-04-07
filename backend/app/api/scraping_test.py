@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_access_token
 from app.database import get_db
+from app.models.source import Source
 from app.models.user import User
 
 router = APIRouter()
@@ -46,12 +47,26 @@ async def get_user_from_cookie(
 @router.post("/run")
 async def run_scraping_test(
     request: ScrapeTestRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_user_from_cookie),
 ):
-    """Proxy scraping test request to scrapers container."""
+    """Proxy scraping test request to scrapers container, passing configured sources."""
+    # Fetch active sources from DB
+    result = await db.execute(select(Source).where(Source.is_active == True))
+    sources = result.scalars().all()
+
+    sources_list = [
+        {"name": s.name, "url": s.url, "source_type": s.source_type}
+        for s in sources
+    ]
+
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             f"{SCRAPERS_URL}/scrape/test",
-            json={"brand": request.brand, "model": request.model},
+            json={
+                "brand": request.brand,
+                "model": request.model,
+                "sources": sources_list,
+            },
         )
         return resp.json()

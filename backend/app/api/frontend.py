@@ -96,6 +96,14 @@ async def view_report(request: Request, report_id: str, db: AsyncSession = Depen
     )
 
 
+@router.get("/sources", response_class=HTMLResponse)
+async def sources_page(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await _get_user_from_cookie(request, db)
+    if not user:
+        return RedirectResponse(url="/frontend/login")
+    return templates.TemplateResponse(request, "sources.html", {"user": user})
+
+
 @router.get("/scraping-test", response_class=HTMLResponse)
 async def scraping_test_page(request: Request, db: AsyncSession = Depends(get_db)):
     user = await _get_user_from_cookie(request, db)

@@ -1,10 +1,10 @@
 // UNICAB — Scraping Test Frontend
 
-const SOURCE_LABELS = {
-    forums: { name: 'Forum Automotive', icon: '💬' },
-    youtube: { name: 'YouTube', icon: '▶️' },
-    facebook_ads: { name: 'Facebook Ads', icon: '📢' },
-    google_ads: { name: 'Google Ads', icon: '🔍' },
+const TYPE_ICONS = {
+    forum: '💬',
+    news: '📰',
+    youtube: '▶️',
+    social: '👥',
 };
 
 const STATUS_LABELS = {
@@ -70,7 +70,8 @@ function renderResults(data) {
 }
 
 function createSourceCard(source) {
-    const info = SOURCE_LABELS[source.source] || { name: source.source, icon: '📄' };
+    const icon = TYPE_ICONS[source.source_type] || '📄';
+    const info = { name: source.source, icon: icon };
     const status = STATUS_LABELS[source.status] || STATUS_LABELS.error;
 
     const card = document.createElement('div');

@@ -349,3 +349,121 @@ footer {
     border-radius: 6px;
     margin-top: 1rem;
 }
+
+/* Sources page */
+.sources-page h1 { margin-bottom: 0.3rem; }
+.sources-page .subtitle { color: #666; margin-bottom: 1.5rem; }
+
+.add-source-form .form-row {
+    display: flex;
+    gap: 0.8rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 2rem;
+}
+
+.add-source-form .form-group { flex: 1; min-width: 180px; }
+.add-source-form .form-group-small { flex: 0 0 160px; min-width: 160px; }
+
+.add-source-form label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.add-source-form input,
+.add-source-form select {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.add-source-form button {
+    padding: 0.6rem 1.2rem;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    white-space: nowrap;
+    height: fit-content;
+}
+
+.source-entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 0.6rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.source-entry.inactive { opacity: 0.5; }
+
+.source-info {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.source-type-icon { font-size: 1.5rem; }
+
+.source-info strong { margin-right: 0.5rem; }
+
+.source-type-label {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    background: #e8eaf6;
+    color: #3949ab;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.source-url {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 0.2rem;
+}
+
+.source-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.btn-toggle {
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #f0f0f0;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.btn-toggle.active {
+    background: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.btn-delete {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    background: #fff;
+    color: #c00;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn-delete:hover { background: #f8d7da; }
+
+.empty-state { color: #888; font-style: italic; padding: 2rem 0; }
+.loading-small { color: #888; padding: 1rem 0; }
