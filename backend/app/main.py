@@ -23,7 +23,9 @@ app.include_router(adv.router, prefix="/adv", tags=["adv"])
 app.include_router(frontend.router, prefix="/frontend", tags=["frontend"])
 
 # Static files
-static_dir = Path(__file__).parent.parent.parent / "frontend" / "static"
+_docker_static = Path("/app/frontend/static")
+_local_static = Path(__file__).parent.parent.parent / "frontend" / "static"
+static_dir = _docker_static if _docker_static.exists() else _local_static
 if static_dir.exists():
     app.mount("/frontend/static", StaticFiles(directory=str(static_dir)), name="static")
 

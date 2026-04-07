@@ -16,7 +16,11 @@ from app.models.report import Report
 
 router = APIRouter()
 
-templates_dir = Path(__file__).parent.parent.parent.parent / "frontend" / "templates"
+# In Docker: /app/frontend/templates (mounted volume)
+# Local dev: relative path from backend/app/api/ → frontend/templates
+_docker_path = Path("/app/frontend/templates")
+_local_path = Path(__file__).parent.parent.parent.parent / "frontend" / "templates"
+templates_dir = _docker_path if _docker_path.exists() else _local_path
 templates = Jinja2Templates(directory=str(templates_dir))
 
 
