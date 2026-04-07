@@ -5,7 +5,6 @@ import logging
 from dataclasses import dataclass, field
 
 from firecrawl import FirecrawlApp
-from firecrawl.v2.types import ScrapeOptions
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +24,14 @@ class FirecrawlResponse:
     error: str | None = None
 
 
-# Scrape options for cleaner content
-SCRAPE_OPTIONS = ScrapeOptions(
-    only_main_content=True,
-    block_ads=True,
-    exclude_tags=["nav", "footer", "header", "aside", "script", "style", "iframe",
-                   ".cookie-banner", ".newsletter-signup", ".sidebar", ".advertisement",
-                   ".social-share", ".breadcrumb", ".pagination"],
-    formats=["markdown"],
-    timeout=15000,
-)
+# Scrape keyword arguments for cleaner content
+SCRAPE_KWARGS = {
+    "only_main_content": True,
+    "block_ads": True,
+    "exclude_tags": ["nav", "footer", "header", "aside", "script", "style", "iframe"],
+    "formats": ["markdown"],
+    "timeout": 15000,
+}
 
 
 class FirecrawlClient:
@@ -96,7 +93,7 @@ class FirecrawlClient:
     def scrape(self, url: str) -> FirecrawlResponse:
         """Scrape a single URL with clean content extraction."""
         try:
-            response = self.app.scrape(url, scrape_options=SCRAPE_OPTIONS)
+            response = self.app.scrape(url, **SCRAPE_KWARGS)
 
             content = ""
             title = url
