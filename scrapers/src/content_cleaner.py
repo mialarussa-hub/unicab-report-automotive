@@ -70,7 +70,7 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
                 },
                 json={
                     "model": "claude-3-haiku-20240307",
-                    "max_tokens": 8192,
+                    "max_tokens": 4096,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
