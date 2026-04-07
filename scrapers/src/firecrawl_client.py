@@ -54,13 +54,16 @@ class FirecrawlClient:
                 content = ""
 
                 if hasattr(item, 'url'):
-                    url = item.url or ""
-                    title = item.title if hasattr(item, 'title') else ""
-                    content = item.description if hasattr(item, 'description') else ""
+                    url = (item.url or "") if hasattr(item, 'url') else ""
+                    title = (item.title or "") if hasattr(item, 'title') else ""
+                    content = (item.description or "") if hasattr(item, 'description') else ""
+                    # Also try markdown if description is empty
+                    if not content and hasattr(item, 'markdown'):
+                        content = item.markdown or ""
                 elif isinstance(item, dict):
-                    url = item.get("url", "")
-                    title = item.get("title", "")
-                    content = item.get("markdown", item.get("content", ""))
+                    url = item.get("url") or ""
+                    title = item.get("title") or ""
+                    content = item.get("markdown") or item.get("content") or item.get("description") or ""
 
                 if url or content:
                     results.append(FirecrawlResult(
@@ -89,10 +92,11 @@ class FirecrawlClient:
 
             if hasattr(response, 'markdown'):
                 content = response.markdown or ""
-                title = response.title if hasattr(response, 'title') else url
+                title = (response.title or url) if hasattr(response, 'title') else url
             elif isinstance(response, dict):
-                content = response.get("markdown", response.get("content", ""))
-                title = response.get("metadata", {}).get("title", url)
+                content = response.get("markdown") or response.get("content") or ""
+                meta = response.get("metadata") or {}
+                title = meta.get("title") or url
 
             result = FirecrawlResult(url=url, title=title, content=content)
             return FirecrawlResponse(results=[result], credits_used=1)

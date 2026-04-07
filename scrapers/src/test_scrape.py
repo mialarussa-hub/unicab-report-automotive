@@ -132,7 +132,7 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
 
         for r in resp.results:
             if r.url and r.url not in found_urls:
-                found_urls[r.url] = {"title": r.title, "snippet": r.content[:300]}
+                found_urls[r.url] = {"title": r.title or "", "snippet": (r.content or "")[:300]}
 
     if not found_urls:
         return SourceResult(
@@ -141,7 +141,9 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    logger.info(f"[{name}] Found {len(found_urls)} URLs, scraping top {MAX_SCRAPE_PER_SOURCE}")
+    logger.warning(f"[{name}] STEP 1 done: found {len(found_urls)} URLs, scraping top {MAX_SCRAPE_PER_SOURCE}")
+    for u in list(found_urls.keys())[:5]:
+        logger.warning(f"  → {u}")
 
     # --- STEP 2: Scrape full content of top URLs ---
     urls_to_scrape = list(found_urls.keys())[:MAX_SCRAPE_PER_SOURCE]
@@ -150,12 +152,12 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
 
     for page_url in urls_to_scrape:
         meta = found_urls[page_url]
+        logger.warning(f"[{name}] STEP 2: scraping {page_url}")
         resp = client.scrape(page_url)
         scrape_credits += resp.credits_used
 
         if resp.error:
             logger.warning(f"[{name}] Scrape error for {page_url}: {resp.error}")
-            # Still include with snippet only
             items.append({
                 "url": page_url,
                 "title": meta["title"],
@@ -168,6 +170,7 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
         full_content = ""
         if resp.results:
             full_content = resp.results[0].content or ""
+        logger.warning(f"[{name}] Scraped {page_url}: {len(full_content)} chars")
 
         # Use full content if we got it, otherwise fall back to snippet
         content = full_content if len(full_content) > len(meta["snippet"]) else meta["snippet"]
