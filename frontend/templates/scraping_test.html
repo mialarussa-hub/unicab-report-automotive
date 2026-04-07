@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Test Scraping — UNICAB{% endblock %}
+
+{% block content %}
+<div class="scraping-test">
+    <h1>Test Scraping</h1>
+    <p class="subtitle">Inserisci un brand e modello per testare lo scraping da tutte le fonti.</p>
+
+    <form id="scraping-form" class="scraping-form">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="brand">Brand *</label>
+                <input type="text" id="brand" name="brand" placeholder="es. Fiat, Alfa Romeo, BMW" required>
+            </div>
+            <div class="form-group">
+                <label for="model">Modello</label>
+                <input type="text" id="model" name="model" placeholder="es. Panda, Giulia, Serie 3">
+            </div>
+            <button type="submit" id="submit-btn">Avvia Test</button>
+        </div>
+    </form>
+
+    <div id="loading" class="loading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Scraping in corso... Potrebbe richiedere fino a 30 secondi.</p>
+    </div>
+
+    <div id="results-meta" class="results-meta" style="display: none;">
+        <span id="meta-credits"></span>
+        <span id="meta-duration"></span>
+    </div>
+
+    <div id="results" class="results-container"></div>
+</div>
+
+<script src="/frontend/static/js/scraping_test.js"></script>
+{% endblock %}

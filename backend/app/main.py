@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, reports, data, sentiment, adv
+from app.api import auth, reports, data, sentiment, adv, scraping_test
 from app.api import frontend
 
 app = FastAPI(
@@ -18,6 +18,7 @@ app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(data.router, prefix="/data", tags=["data"])
 app.include_router(sentiment.router, prefix="/sentiment", tags=["sentiment"])
 app.include_router(adv.router, prefix="/adv", tags=["adv"])
+app.include_router(scraping_test.router, prefix="/scraping-test", tags=["scraping-test"])
 
 # Frontend routes (Jinja2 templates)
 app.include_router(frontend.router, prefix="/frontend", tags=["frontend"])

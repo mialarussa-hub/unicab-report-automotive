@@ -1,8 +1,16 @@
-"""Internal API for scrapers — invoked by n8n workflows."""
+"""Internal API for scrapers — invoked by backend or n8n workflows."""
 
 from fastapi import FastAPI
+from pydantic import BaseModel
+
+from scrapers.src.test_scrape import run_test_scrape
 
 app = FastAPI(title="UNICAB Scrapers", docs_url="/docs")
+
+
+class ScrapeTestRequest(BaseModel):
+    brand: str
+    model: str = ""
 
 
 @app.get("/health")
@@ -10,29 +18,26 @@ async def health():
     return {"status": "ok"}
 
 
+@app.post("/scrape/test")
+async def scrape_test(request: ScrapeTestRequest):
+    """Run all scrapers in parallel and return aggregated results."""
+    result = await run_test_scrape(request.brand, request.model)
+    return result
+
+
 @app.post("/scrape/forums")
-async def scrape_forums(brand: str | None = None):
-    """Trigger forum scraping for a specific brand or all brands."""
-    # TODO: implement in AI layer sprint
-    return {"status": "not_implemented", "message": "Forum scraping — to be implemented"}
+async def scrape_forums_endpoint(brand: str = "", model: str = ""):
+    """Trigger forum scraping for a specific brand."""
+    from scrapers.src.forums import scrape_forums
+    from dataclasses import asdict
+    result = await scrape_forums(brand, model)
+    return asdict(result)
 
 
 @app.post("/scrape/youtube")
-async def scrape_youtube(brand: str | None = None):
+async def scrape_youtube_endpoint(brand: str = "", model: str = ""):
     """Trigger YouTube sentiment collection."""
-    # TODO: implement
-    return {"status": "not_implemented"}
-
-
-@app.post("/scrape/facebook-ads")
-async def scrape_facebook_ads(brand: str | None = None):
-    """Trigger Facebook Ads Library data collection."""
-    # TODO: implement
-    return {"status": "not_implemented"}
-
-
-@app.post("/scrape/google-ads")
-async def scrape_google_ads(brand: str | None = None):
-    """Trigger Google Ads Transparency data collection."""
-    # TODO: implement
-    return {"status": "not_implemented"}
+    from scrapers.src.youtube import scrape_youtube
+    from dataclasses import asdict
+    result = await scrape_youtube(brand, model)
+    return asdict(result)
