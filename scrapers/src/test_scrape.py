@@ -33,23 +33,18 @@ def _normalize_forum_url(url: str) -> str:
 
 logger = logging.getLogger(__name__)
 
-# Query templates per source type — quoted phrases for exact match
-QUERY_TEMPLATES = {
-    "news": [
-        'site:{domain} "{search_term}" recensione',
-        'site:{domain} "{search_term}" prova su strada',
-    ],
-    "forum": [
-        'site:{domain} "{search_term}" opinioni',
-        'site:{domain} "{search_term}" problemi difetti',
-        'site:{domain} "{search_term}" proprietari esperienza',
-        'site:{domain} "{search_term}" consumi reali',
-    ],
-    "social": [
-        'site:{domain} "{search_term}"',
-        '"{search_term}" opinioni commenti {source_name}',
-    ],
-}
+def _build_search_terms(brand: str, model: str, model_context: dict) -> list[str]:
+    """Generate search term variants from brand aliases and model name.
+
+    For "Volkswagen Golf" returns: ["Volkswagen Golf", "VW Golf"]
+    This way forums with "VW Golf" in titles get found too.
+    """
+    terms = [f"{brand} {model}".strip()]
+    for alias in model_context.get("brand_aliases", []):
+        variant = f"{alias} {model}".strip()
+        if variant not in terms:
+            terms.append(variant)
+    return terms
 
 # Max pages to scrape per source (controls credit usage)
 MAX_SCRAPE_PER_SOURCE = 2
@@ -134,135 +129,228 @@ async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
 
 
 async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResult:
-    """3-step web scraping: search → relevance filter → scrape full content."""
+    """Route to forum or news strategy based on source type."""
+    source_type = source.get("source_type", "news")
+    if source_type == "forum":
+        return await _scrape_forum_source(brand, model, source)
+    else:
+        return await _scrape_news_source(brand, model, source)
+
+
+async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceResult:
+    """Forum strategy: MAP (1 credit) → relevance filter → scrape top N threads."""
     start = time.time()
     name = source.get("name", "Unknown")
     url = source.get("url", "")
-    source_type = source.get("source_type", "news")
-    domain = url.replace("https://", "").replace("http://", "").rstrip("/")
     search_term = f"{brand} {model}".strip()
-
-    # Build model context for relevance scoring
     model_context = build_model_context(brand, model)
+    search_terms = _build_search_terms(brand, model, model_context)
 
     try:
         client = FirecrawlClient()
     except ValueError as e:
-        return SourceResult(source=name, source_type=source_type, status="error", error=str(e))
+        return SourceResult(source=name, source_type="forum", status="error", error=str(e))
 
-    # --- STEP 1: Search for relevant URLs (limit=10 for more candidates) ---
-    templates = QUERY_TEMPLATES.get(source_type, QUERY_TEMPLATES["news"])
+    # --- STEP 1: MAP the forum to discover thread URLs (1 credit per map call) ---
     found_urls = {}  # url -> {title, snippet}
-    search_credits = 0
+    total_credits = 0
 
-    for template in templates:
-        query = template.format(
-            domain=domain, search_term=search_term, source_name=name,
-        )
-        resp = client.search(query, limit=10)
-        search_credits += resp.credits_used
+    for term in search_terms:
+        logger.warning(f"[{name}] MAP: discovering URLs for '{term}'")
+        map_resp = client.map(url, search=term, limit=50)
+        total_credits += map_resp.credits_used
 
-        if resp.error:
-            logger.warning(f"[{name}] Search error for '{query}': {resp.error}")
+        if map_resp.error:
+            logger.warning(f"[{name}] MAP error: {map_resp.error}")
             continue
 
-        for r in resp.results:
-            if r.url:
-                # Normalize URL: strip pagination to get page 1 (most comments)
-                clean_url = _normalize_forum_url(r.url)
+        logger.warning(f"[{name}] MAP found {len(map_resp.urls)} URLs")
+
+        for entry in map_resp.urls:
+            raw_url = entry.get("url", "")
+            if raw_url:
+                clean_url = _normalize_forum_url(raw_url)
                 if clean_url not in found_urls:
-                    found_urls[clean_url] = {"title": r.title or "", "snippet": (r.content or "")[:300]}
+                    found_urls[clean_url] = {
+                        "title": entry.get("title", ""),
+                        "snippet": entry.get("description", "")[:300],
+                    }
+
+    # Fallback: if MAP returned nothing, try search
+    if not found_urls:
+        logger.warning(f"[{name}] MAP returned no URLs, falling back to search")
+        for term in search_terms:
+            for suffix in ["opinioni", "problemi", "proprietari"]:
+                query = f"site:{url.replace('https://', '').replace('http://', '').rstrip('/')} {term} {suffix}"
+                resp = client.search(query, limit=5)
+                total_credits += resp.credits_used
+                if resp.error:
+                    continue
+                for r in resp.results:
+                    if r.url:
+                        clean_url = _normalize_forum_url(r.url)
+                        if clean_url not in found_urls:
+                            found_urls[clean_url] = {"title": r.title or "", "snippet": (r.content or "")[:300]}
 
     if not found_urls:
         return SourceResult(
-            source=name, source_type=source_type, status="partial",
-            credits_used=search_credits, error="No URLs found in search",
+            source=name, source_type="forum", status="partial",
+            credits_used=total_credits, error="No URLs found via MAP or search",
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    logger.warning(f"[{name}] STEP 1 done: found {len(found_urls)} unique URLs")
+    logger.warning(f"[{name}] Total unique URLs: {len(found_urls)}, scoring relevance...")
 
-    # --- STEP 1.5: Relevance scoring and filtering ---
-    logger.warning(f"[{name}] STEP 1.5: scoring relevance for '{brand} {model}'")
+    # --- STEP 2: Relevance scoring and filtering ---
     ranked = filter_and_rank(found_urls, brand, model, model_context, max_results=MAX_SCRAPE_PER_SOURCE)
 
     if not ranked:
-        logger.warning(f"[{name}] No URLs passed relevance threshold — skipping scrape")
         return SourceResult(
-            source=name, source_type=source_type, status="partial",
-            credits_used=search_credits,
+            source=name, source_type="forum", status="partial",
+            credits_used=total_credits,
             error=f"Found {len(found_urls)} URLs but none passed relevance filter for '{search_term}'",
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    urls_to_scrape = [url for url, _ in ranked]
-    logger.warning(f"[{name}] {len(urls_to_scrape)} URLs passed filter (from {len(found_urls)} candidates)")
-    scrape_credits = 0
+    # --- STEP 3: Scrape the top-ranked threads ---
     items = []
-
-    # Build a quick lookup for scores from ranked results
     ranked_meta = {u: m for u, m in ranked}
 
-    for page_url in urls_to_scrape:
-        meta = found_urls[page_url]
-        relevance_score = ranked_meta.get(page_url, {}).get("score", 0)
-        logger.warning(f"[{name}] STEP 2: scraping {page_url} (relevance={relevance_score})")
+    for page_url, meta in ranked:
+        relevance_score = meta.get("score", 0)
+        logger.warning(f"[{name}] SCRAPE: {page_url} (relevance={relevance_score})")
         resp = client.scrape(page_url)
-        scrape_credits += resp.credits_used
+        total_credits += resp.credits_used
 
         if resp.error:
             logger.warning(f"[{name}] Scrape error for {page_url}: {resp.error}")
             items.append({
-                "url": page_url,
-                "title": meta["title"],
-                "content": meta["snippet"],
-                "content_length": len(meta["snippet"]),
-                "relevance_score": relevance_score,
-                "scraped": False,
+                "url": page_url, "title": meta.get("title", ""),
+                "content": meta.get("snippet", ""), "content_length": 0,
+                "relevance_score": relevance_score, "scraped": False,
             })
             continue
 
-        full_content = ""
-        if resp.results:
-            full_content = resp.results[0].content or ""
+        full_content = resp.results[0].content if resp.results else ""
         logger.warning(f"[{name}] Scraped {page_url}: {len(full_content)} chars")
-
-        # Use full content if we got it, otherwise fall back to snippet
-        content = full_content if len(full_content) > len(meta["snippet"]) else meta["snippet"]
 
         items.append({
             "url": page_url,
-            "title": resp.results[0].title if resp.results else meta["title"],
-            "content": content[:5000],  # cap at 5k chars for display
+            "title": resp.results[0].title if resp.results else meta.get("title", ""),
+            "content": (full_content or meta.get("snippet", ""))[:5000],
             "content_length": len(full_content),
             "relevance_score": relevance_score,
             "scraped": True,
         })
 
-    # --- STEP 3: Clean with Claude AI ---
-    logger.warning(f"[{name}] STEP 3: cleaning {len(items)} pages with Claude AI")
+    # --- STEP 4: Clean with Claude AI ---
+    await _clean_items_with_ai(items, name)
+
+    return SourceResult(
+        source=name, source_type="forum",
+        status="ok" if items else "partial",
+        result_count=len(items), credits_used=total_credits,
+        items=items, duration_ms=int((time.time() - start) * 1000),
+    )
+
+
+async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceResult:
+    """News strategy: search with scrapeOptions → get full markdown directly, no separate scrape."""
+    start = time.time()
+    name = source.get("name", "Unknown")
+    url = source.get("url", "")
+    domain = url.replace("https://", "").replace("http://", "").rstrip("/")
+    search_term = f"{brand} {model}".strip()
+    model_context = build_model_context(brand, model)
+    search_terms = _build_search_terms(brand, model, model_context)
+
+    try:
+        client = FirecrawlClient()
+    except ValueError as e:
+        return SourceResult(source=name, source_type="news", status="error", error=str(e))
+
+    # --- STEP 1: Search with full markdown (eliminates separate scrape) ---
+    found_urls = {}
+    total_credits = 0
+
+    for term in search_terms:
+        for suffix in ["recensione", "prova su strada"]:
+            query = f"site:{domain} {term} {suffix}"
+            logger.warning(f"[{name}] SEARCH+MD: '{query}'")
+            resp = client.search(query, limit=5, with_markdown=True)
+            total_credits += resp.credits_used
+
+            if resp.error:
+                logger.warning(f"[{name}] Search error: {resp.error}")
+                continue
+
+            for r in resp.results:
+                if r.url and r.url not in found_urls:
+                    found_urls[r.url] = {
+                        "title": r.title or "",
+                        "snippet": (r.content or "")[:300],
+                        "full_content": r.content or "",
+                    }
+
+    if not found_urls:
+        return SourceResult(
+            source=name, source_type="news", status="partial",
+            credits_used=total_credits, error="No URLs found in search",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    logger.warning(f"[{name}] Found {len(found_urls)} URLs with markdown, scoring relevance...")
+
+    # --- STEP 2: Relevance scoring ---
+    ranked = filter_and_rank(found_urls, brand, model, model_context, max_results=MAX_SCRAPE_PER_SOURCE)
+
+    if not ranked:
+        return SourceResult(
+            source=name, source_type="news", status="partial",
+            credits_used=total_credits,
+            error=f"Found {len(found_urls)} URLs but none passed relevance filter for '{search_term}'",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    # --- STEP 3: Build items directly from search results (already have markdown!) ---
+    items = []
+    for page_url, meta in ranked:
+        full_content = found_urls[page_url].get("full_content", "")
+        has_content = len(full_content) > 200
+        logger.warning(f"[{name}] Result: {page_url} — {len(full_content)} chars (relevance={meta.get('score', 0)})")
+
+        items.append({
+            "url": page_url,
+            "title": meta.get("title", ""),
+            "content": full_content[:5000],
+            "content_length": len(full_content),
+            "relevance_score": meta.get("score", 0),
+            "scraped": has_content,
+        })
+
+    # --- STEP 4: Clean with Claude AI ---
+    await _clean_items_with_ai(items, name)
+
+    return SourceResult(
+        source=name, source_type="news",
+        status="ok" if items else "partial",
+        result_count=len(items), credits_used=total_credits,
+        items=items, duration_ms=int((time.time() - start) * 1000),
+    )
+
+
+async def _clean_items_with_ai(items: list[dict], source_name: str):
+    """Run Claude AI comment extraction on scraped items."""
+    logger.warning(f"[{source_name}] AI: cleaning {len(items)} pages")
     for item in items:
         if item.get("scraped") and len(item.get("content", "")) > 200:
-            cleaned = await clean_and_extract(item["content"], name, item["url"])
+            cleaned = await clean_and_extract(item["content"], source_name, item["url"])
             if cleaned.get("cleaned") and cleaned.get("comments"):
                 item["ai_comments"] = cleaned["comments"]
                 item["ai_comment_count"] = cleaned["comment_count"]
-                logger.warning(f"[{name}] AI extracted {cleaned['comment_count']} comments from {item['url']}")
+                logger.warning(f"[{source_name}] AI extracted {cleaned['comment_count']} comments from {item['url']}")
             elif cleaned.get("error"):
-                logger.warning(f"[{name}] AI cleaning error: {cleaned['error']}")
-
-    total_credits = search_credits + scrape_credits
-    duration = int((time.time() - start) * 1000)
-
-    return SourceResult(
-        source=name,
-        source_type=source_type,
-        status="ok" if items else "partial",
-        result_count=len(items),
-        credits_used=total_credits,
-        items=items,
-        duration_ms=duration,
-    )
+                logger.warning(f"[{source_name}] AI error: {cleaned['error']}")
 
 
 async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceResult:
