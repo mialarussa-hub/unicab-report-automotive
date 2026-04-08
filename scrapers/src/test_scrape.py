@@ -237,14 +237,19 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
         items.append({
             "url": page_url,
             "title": resp.results[0].title if resp.results else meta.get("title", ""),
-            "content": (full_content or meta.get("snippet", ""))[:5000],
+            "content": (full_content or meta.get("snippet", ""))[:5000],  # truncated for API response
+            "_full_content": full_content,  # full content for AI parsing (not sent to frontend)
             "content_length": len(full_content),
             "relevance_score": relevance_score,
             "scraped": True,
         })
 
-    # --- STEP 4: Clean with Claude AI ---
+    # --- STEP 4: Clean with Claude AI (uses full content, not truncated) ---
     await _clean_items_with_ai(items, name)
+
+    # Remove _full_content before returning (not needed in API response)
+    for item in items:
+        item.pop("_full_content", None)
 
     return SourceResult(
         source=name, source_type="forum",
@@ -323,13 +328,17 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
             "url": page_url,
             "title": meta.get("title", ""),
             "content": full_content[:5000],
+            "_full_content": full_content,
             "content_length": len(full_content),
             "relevance_score": meta.get("score", 0),
             "scraped": has_content,
         })
 
-    # --- STEP 4: Clean with Claude AI ---
+    # --- STEP 4: Clean with Claude AI (uses full content) ---
     await _clean_items_with_ai(items, name)
+
+    for item in items:
+        item.pop("_full_content", None)
 
     return SourceResult(
         source=name, source_type="news",
@@ -343,8 +352,10 @@ async def _clean_items_with_ai(items: list[dict], source_name: str):
     """Run Claude AI comment extraction on scraped items."""
     logger.warning(f"[{source_name}] AI: cleaning {len(items)} pages")
     for item in items:
-        if item.get("scraped") and len(item.get("content", "")) > 200:
-            cleaned = await clean_and_extract(item["content"], source_name, item["url"])
+        # Use full content for parsing (not the truncated 5K version)
+        ai_content = item.get("_full_content") or item.get("content", "")
+        if item.get("scraped") and len(ai_content) > 200:
+            cleaned = await clean_and_extract(ai_content, source_name, item["url"])
             if cleaned.get("cleaned") and cleaned.get("comments"):
                 item["ai_comments"] = cleaned["comments"]
                 item["ai_comment_count"] = cleaned["comment_count"]
