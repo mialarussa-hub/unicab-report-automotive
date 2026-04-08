@@ -1,13 +1,12 @@
-"""Reddit client — uses PullPush.io archive API (works from datacenter IPs).
+"""Reddit client — uses Arctic Shift archive API (works from datacenter IPs).
 
 Reddit's native API blocks datacenter IPs (403 from Hetzner).
-PullPush.io is a free Reddit archive that provides:
-- Post search by subreddit + query
-- Comment retrieval by post ID
+Arctic Shift is a comprehensive Reddit archive with better search than PullPush:
+- Post search by subreddit + query/title
+- Comment retrieval by post ID (link_id)
 - No authentication required, no IP restrictions
 """
 
-import time
 import logging
 from dataclasses import dataclass, field
 
@@ -15,11 +14,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-PULLPUSH_BASE = "https://api.pullpush.io/reddit"
+ARCTIC_SHIFT_BASE = "https://arctic-shift.photon-reddit.com/api"
 USER_AGENT = "UNICABAutomotiveResearch/1.0"
-
-# Filter: only posts from the last N months
-MAX_AGE_SECONDS = 365 * 24 * 3600  # 12 months
 
 
 @dataclass
@@ -59,35 +55,34 @@ class RedditClient:
         )
 
     async def search_subreddit(
-        self, subreddit: str, query: str, limit: int = 10,
+        self, subreddit: str, query: str, limit: int = 25,
     ) -> RedditResponse:
-        """Search a subreddit via PullPush.io archive API."""
-        try:
-            # Calculate timestamp for "after" filter (last 12 months)
-            after_ts = int(time.time()) - MAX_AGE_SECONDS
+        """Search a subreddit via Arctic Shift archive API.
 
-            url = f"{PULLPUSH_BASE}/search/submission/"
+        Uses 'title' search for better matching — Reddit users type short titles
+        like "Golf" not "Volkswagen Golf".
+        """
+        try:
+            url = f"{ARCTIC_SHIFT_BASE}/posts/search"
             resp = await self.client.get(url, params={
                 "subreddit": subreddit,
-                "q": query,
-                "size": limit,
-                "sort": "desc",
-                "sort_type": "created_utc",
-                "after": after_ts,
+                "title": query,
+                "limit": str(limit),
             })
             resp.raise_for_status()
             data = resp.json()
 
             posts = []
             for p in data.get("data", []):
+                permalink = p.get("permalink", "")
                 posts.append(RedditPost(
                     post_id=p.get("id", ""),
                     title=p.get("title", ""),
-                    selftext=p.get("selftext", ""),
+                    selftext=p.get("selftext") or "",
                     author=p.get("author", "[deleted]"),
                     score=p.get("score", 0),
                     num_comments=p.get("num_comments", 0),
-                    url=f"https://www.reddit.com{p.get('permalink', '')}",
+                    url=f"https://www.reddit.com{permalink}" if permalink else "",
                     subreddit=p.get("subreddit", subreddit),
                     created_utc=p.get("created_utc", 0),
                 ))
@@ -95,31 +90,32 @@ class RedditClient:
             return RedditResponse(posts=posts)
 
         except Exception as e:
-            logger.error(f"PullPush search error for r/{subreddit} '{query}': {e}")
+            logger.error(f"Arctic Shift search error for r/{subreddit} '{query}': {e}")
             return RedditResponse(error=str(e))
 
-    async def get_post_comments(self, post_id: str, limit: int = 30) -> list[RedditComment]:
-        """Get comments for a post via PullPush.io."""
+    async def get_post_comments(self, post_id: str, limit: int = 50) -> list[RedditComment]:
+        """Get comments for a post via Arctic Shift."""
         try:
-            url = f"{PULLPUSH_BASE}/search/comment/"
+            url = f"{ARCTIC_SHIFT_BASE}/comments/search"
             resp = await self.client.get(url, params={
                 "link_id": post_id,
-                "size": limit,
-                "sort": "desc",
-                "sort_type": "score",
+                "limit": str(limit),
             })
             resp.raise_for_status()
             data = resp.json()
 
             comments = []
             for c in data.get("data", []):
-                body = c.get("body", "")
+                body = c.get("body") or ""
                 author = c.get("author", "[deleted]")
 
                 # Skip deleted/removed/bot comments
                 if not body or author == "[deleted]" or body == "[removed]":
                     continue
-                if author.lower() in ("automoderator", "bot"):
+                if author.lower() in ("automoderator", "bot", "sneakpeekbot"):
+                    continue
+                # Skip very short noise
+                if len(body.strip()) < 5:
                     continue
 
                 comments.append(RedditComment(
@@ -132,33 +128,68 @@ class RedditClient:
             return comments
 
         except Exception as e:
-            logger.error(f"PullPush comments error for post {post_id}: {e}")
+            logger.error(f"Arctic Shift comments error for post {post_id}: {e}")
             return []
 
     async def collect(
-        self, subreddit: str, query: str, max_posts: int = 10, max_comments: int = 30,
+        self,
+        subreddit: str,
+        queries: list[str],
+        max_posts: int = 25,
+        max_comments: int = 50,
+        min_comments: int = 2,
     ) -> RedditResponse:
-        """Full collection: search posts + fetch comments for each."""
-        search_resp = await self.search_subreddit(subreddit, query, limit=max_posts)
+        """Full collection: search with multiple queries + fetch comments.
 
-        if search_resp.error:
-            return search_resp
+        Args:
+            subreddit: target subreddit
+            queries: list of search terms (e.g. ["golf", "VW golf", "volkswagen golf"])
+            max_posts: max posts per query
+            max_comments: max comments to fetch per post
+            min_comments: skip posts with fewer comments than this
+        """
+        all_posts = {}  # post_id -> post
 
-        if not search_resp.posts:
-            return RedditResponse(error=f"No posts found in r/{subreddit} for '{query}'")
+        for query in queries:
+            logger.warning(f"[Reddit] Searching r/{subreddit} title='{query}'")
+            response = await self.search_subreddit(subreddit, query, limit=max_posts)
 
-        # Fetch comments for posts that have comments
-        for post in search_resp.posts:
-            if post.num_comments > 0:
-                post.comments = await self.get_post_comments(
-                    post.post_id, limit=max_comments,
-                )
-                logger.warning(
-                    f"[Reddit] r/{subreddit} post '{post.title[:50]}': "
-                    f"{len(post.comments)} comments fetched"
-                )
+            if response.error:
+                logger.warning(f"[Reddit] Search error: {response.error}")
+                continue
 
-        return search_resp
+            for post in response.posts:
+                if post.post_id not in all_posts:
+                    all_posts[post.post_id] = post
+
+        if not all_posts:
+            return RedditResponse(error=f"No posts found in r/{subreddit}")
+
+        # Sort by num_comments descending — scrape the most active threads first
+        sorted_posts = sorted(all_posts.values(), key=lambda p: p.num_comments, reverse=True)
+
+        # Fetch comments for posts with enough comments
+        fetched = 0
+        for post in sorted_posts:
+            if post.num_comments < min_comments:
+                continue
+
+            post.comments = await self.get_post_comments(post.post_id, limit=max_comments)
+            fetched += 1
+            logger.warning(
+                f"[Reddit] r/{subreddit} '{post.title[:50]}': "
+                f"{len(post.comments)} comments (of {post.num_comments})"
+            )
+
+        # Only return posts that have comments
+        posts_with_comments = [p for p in sorted_posts if p.comments]
+
+        logger.warning(
+            f"[Reddit] r/{subreddit}: {len(all_posts)} posts found, "
+            f"{fetched} fetched, {len(posts_with_comments)} with comments"
+        )
+
+        return RedditResponse(posts=posts_with_comments)
 
     async def close(self):
         await self.client.aclose()

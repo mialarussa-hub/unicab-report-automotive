@@ -435,31 +435,32 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
 
     client = RedditClient()
     try:
-        # Search with multiple term variants
-        all_posts = {}  # post_id -> post
-        for term in search_terms:
-            logger.warning(f"[{name}] PullPush: searching r/{subreddit} for '{term}'")
-            response = await client.collect(subreddit, term, max_posts=10, max_comments=30)
+        # Reddit-specific queries: users type "Golf" not "Volkswagen Golf"
+        reddit_queries = [model]  # Just the model name first (most common on Reddit)
+        reddit_queries.extend(search_terms)  # Also try "Volkswagen Golf", "VW Golf"
 
-            if response.error:
-                logger.warning(f"[{name}] PullPush error: {response.error}")
-                continue
+        logger.warning(f"[{name}] Arctic Shift: searching r/{subreddit} with queries {reddit_queries}")
+        response = await client.collect(
+            subreddit, reddit_queries, max_posts=25, max_comments=50, min_comments=2,
+        )
 
-            for post in response.posts:
-                if post.post_id not in all_posts:
-                    all_posts[post.post_id] = post
-
-        if not all_posts:
+        if response.error:
             return SourceResult(
                 source=name, source_type="forum", status="partial",
-                error=f"No Reddit posts found for r/{subreddit}",
+                error=response.error, duration_ms=int((time.time() - start) * 1000),
+            )
+
+        if not response.posts:
+            return SourceResult(
+                source=name, source_type="forum", status="partial",
+                error=f"No Reddit posts with comments found for r/{subreddit}",
                 duration_ms=int((time.time() - start) * 1000),
             )
 
         # Build items with structured comment data
         items = []
         total_comments = 0
-        for post in all_posts.values():
+        for post in response.posts:
             # Build AI-ready comment list directly (no parsing needed — already structured)
             ai_comments = []
             for c in post.comments:
@@ -490,7 +491,7 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
                 "scraped": True,
             })
 
-        logger.warning(f"[{name}] PullPush: {len(items)} posts, {total_comments} comments total")
+        logger.warning(f"[{name}] Arctic Shift: {len(items)} posts, {total_comments} comments total")
 
         # Run sentiment analysis on the comments
         for item in items:
