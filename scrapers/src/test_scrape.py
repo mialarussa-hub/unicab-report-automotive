@@ -10,6 +10,8 @@ from src.firecrawl_client import FirecrawlClient
 from src.youtube_client import YouTubeClient
 from src.reddit_client import RedditClient
 from src.content_cleaner import clean_and_extract
+from src.auto_brands import build_model_context
+from src.relevance import filter_and_rank
 
 
 def _normalize_forum_url(url: str) -> str:
@@ -31,25 +33,26 @@ def _normalize_forum_url(url: str) -> str:
 
 logger = logging.getLogger(__name__)
 
-# Query templates per source type
+# Query templates per source type — quoted phrases for exact match
 QUERY_TEMPLATES = {
     "news": [
-        "site:{domain} {search_term}",
-        "site:{domain} {search_term} recensione",
+        'site:{domain} "{search_term}" recensione',
+        'site:{domain} "{search_term}" prova su strada',
     ],
     "forum": [
-        "site:{domain} {search_term} opinioni",
-        "site:{domain} {search_term} problemi difetti",
-        "site:{domain} {search_term} proprietari esperienza",
+        'site:{domain} "{search_term}" opinioni',
+        'site:{domain} "{search_term}" problemi difetti',
+        'site:{domain} "{search_term}" proprietari esperienza',
+        'site:{domain} "{search_term}" consumi reali',
     ],
     "social": [
-        "site:{domain} {search_term}",
-        "{source_name} {search_term} opinioni commenti",
+        'site:{domain} "{search_term}"',
+        '"{search_term}" opinioni commenti {source_name}',
     ],
 }
 
 # Max pages to scrape per source (controls credit usage)
-MAX_SCRAPE_PER_SOURCE = 3
+MAX_SCRAPE_PER_SOURCE = 2
 
 
 @dataclass
@@ -131,7 +134,7 @@ async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
 
 
 async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResult:
-    """2-step web scraping: search for URLs, then scrape full content."""
+    """3-step web scraping: search → relevance filter → scrape full content."""
     start = time.time()
     name = source.get("name", "Unknown")
     url = source.get("url", "")
@@ -139,12 +142,15 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
     domain = url.replace("https://", "").replace("http://", "").rstrip("/")
     search_term = f"{brand} {model}".strip()
 
+    # Build model context for relevance scoring
+    model_context = build_model_context(brand, model)
+
     try:
         client = FirecrawlClient()
     except ValueError as e:
         return SourceResult(source=name, source_type=source_type, status="error", error=str(e))
 
-    # --- STEP 1: Search for relevant URLs ---
+    # --- STEP 1: Search for relevant URLs (limit=10 for more candidates) ---
     templates = QUERY_TEMPLATES.get(source_type, QUERY_TEMPLATES["news"])
     found_urls = {}  # url -> {title, snippet}
     search_credits = 0
@@ -153,7 +159,7 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
         query = template.format(
             domain=domain, search_term=search_term, source_name=name,
         )
-        resp = client.search(query, limit=5)
+        resp = client.search(query, limit=10)
         search_credits += resp.credits_used
 
         if resp.error:
@@ -174,18 +180,33 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    logger.warning(f"[{name}] STEP 1 done: found {len(found_urls)} URLs, scraping top {MAX_SCRAPE_PER_SOURCE}")
-    for u in list(found_urls.keys())[:5]:
-        logger.warning(f"  → {u}")
+    logger.warning(f"[{name}] STEP 1 done: found {len(found_urls)} unique URLs")
 
-    # --- STEP 2: Scrape full content of top URLs ---
-    urls_to_scrape = list(found_urls.keys())[:MAX_SCRAPE_PER_SOURCE]
+    # --- STEP 1.5: Relevance scoring and filtering ---
+    logger.warning(f"[{name}] STEP 1.5: scoring relevance for '{brand} {model}'")
+    ranked = filter_and_rank(found_urls, brand, model, model_context, max_results=MAX_SCRAPE_PER_SOURCE)
+
+    if not ranked:
+        logger.warning(f"[{name}] No URLs passed relevance threshold — skipping scrape")
+        return SourceResult(
+            source=name, source_type=source_type, status="partial",
+            credits_used=search_credits,
+            error=f"Found {len(found_urls)} URLs but none passed relevance filter for '{search_term}'",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    urls_to_scrape = [url for url, _ in ranked]
+    logger.warning(f"[{name}] {len(urls_to_scrape)} URLs passed filter (from {len(found_urls)} candidates)")
     scrape_credits = 0
     items = []
 
+    # Build a quick lookup for scores from ranked results
+    ranked_meta = {u: m for u, m in ranked}
+
     for page_url in urls_to_scrape:
         meta = found_urls[page_url]
-        logger.warning(f"[{name}] STEP 2: scraping {page_url}")
+        relevance_score = ranked_meta.get(page_url, {}).get("score", 0)
+        logger.warning(f"[{name}] STEP 2: scraping {page_url} (relevance={relevance_score})")
         resp = client.scrape(page_url)
         scrape_credits += resp.credits_used
 
@@ -196,6 +217,7 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
                 "title": meta["title"],
                 "content": meta["snippet"],
                 "content_length": len(meta["snippet"]),
+                "relevance_score": relevance_score,
                 "scraped": False,
             })
             continue
@@ -213,6 +235,7 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
             "title": resp.results[0].title if resp.results else meta["title"],
             "content": content[:5000],  # cap at 5k chars for display
             "content_length": len(full_content),
+            "relevance_score": relevance_score,
             "scraped": True,
         })
 
