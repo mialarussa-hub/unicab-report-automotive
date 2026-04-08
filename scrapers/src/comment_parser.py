@@ -1,8 +1,9 @@
-"""Parse comments from forum markdown — extracts individual user comments before AI analysis.
+"""Parse comments from forum/editorial markdown — extracts individual user comments before AI analysis.
 
-Each forum platform has its own parser:
+Each platform has its own parser:
 - XenForo (forum.quattroruote.it): #### [username](link) headers
 - IPS/Invision (autopareri.com): date-separated blocks with profile links
+- AlVolante (alvolante.it): [username](utente/xxx) + date + text + "segnala abuso" separator
 - Generic: fallback for unknown formats
 """
 
@@ -32,6 +33,12 @@ def parse_comments(markdown: str, url: str = "") -> list[dict]:
         comments = _parse_ips(markdown)
         if comments:
             logger.info(f"Parsed {len(comments)} comments (IPS/Autopareri) from {url}")
+            return comments
+
+    if "alvolante.it" in url:
+        comments = _parse_alvolante(markdown)
+        if comments:
+            logger.info(f"Parsed {len(comments)} comments (AlVolante) from {url}")
             return comments
 
     # Fallback: try XenForo then IPS then generic
@@ -194,6 +201,87 @@ def _parse_ips(markdown: str) -> list[dict]:
             continue
 
         comments.append({"author": author, "text": text})
+
+    return comments
+
+
+# =============================================================================
+# =============================================================================
+# AlVolante parser (alvolante.it)
+# =============================================================================
+
+# AlVolante comment pattern:
+# [username](https://www.alvolante.it/utente/xxx)
+# 6 aprile 2026 - 14:15
+# [optional score number]
+# comment text
+# - Accedi o registrati per inserire commenti.
+# - segnala abuso
+_ALVOLANTE_COMMENT_RE = re.compile(
+    r'\[([^\]]+)\]\(https://www\.alvolante\.it/utente/[^)]+\)\s*\n+'
+    r'(\d{1,2}\s+\w+\s+\d{4}\s*-\s*\d{1,2}:\d{2})\s*\n*'
+    r'(\d+\s*\n)?'  # optional score
+    r'(.*?)'
+    r'(?=\[(?:[^\]]+)\]\(https://www\.alvolante\.it/utente/|\Z|- segnala abuso)',
+    re.DOTALL,
+)
+
+
+def _parse_alvolante(markdown: str) -> list[dict]:
+    """Parse alVolante.it article comments.
+
+    Pattern: [username](utente/xxx) + date + optional score + text, separated by "segnala abuso".
+    All comments on one page (no pagination needed).
+    """
+    # Find the comments section (starts after "Aggiungi un commento" or user voting section)
+    comments_start = markdown.find("Aggiungi un commento")
+    if comments_start == -1:
+        comments_start = markdown.find("segnala abuso")
+    if comments_start == -1:
+        return []
+
+    comments_section = markdown[comments_start:]
+
+    # Split on "segnala abuso" — each block is one comment
+    blocks = re.split(r'-\s*segnala abuso', comments_section)
+
+    comments = []
+    for block in blocks:
+        # Find username from profile link
+        author_match = re.search(
+            r'\[([^\]]+)\]\(https://www\.alvolante\.it/utente/',
+            block,
+        )
+        if not author_match:
+            continue
+
+        author = author_match.group(1).strip()
+
+        # Find date
+        date_match = re.search(
+            r'(\d{1,2}\s+\w+\s+\d{4}\s*-\s*\d{1,2}:\d{2})',
+            block,
+        )
+
+        # Extract text: everything after the date (and optional score number)
+        if date_match:
+            text_start = date_match.end()
+            raw_text = block[text_start:]
+        else:
+            # Fallback: everything after the author link
+            text_start = author_match.end()
+            raw_text = block[text_start:]
+
+        # Clean: remove score numbers at start, login prompts, images
+        raw_text = re.sub(r'^\s*\d+\s*\n', '', raw_text)  # leading score
+        raw_text = re.sub(r'-\s*\[Accedi\].*', '', raw_text, flags=re.DOTALL)  # login prompt
+        text = _clean_comment_text(raw_text)
+
+        if text and len(text) > 5 and author:
+            # Skip "Visualizza il profilo" noise
+            if "Visualizza il profilo" in text:
+                continue
+            comments.append({"author": author, "text": text})
 
     return comments
 

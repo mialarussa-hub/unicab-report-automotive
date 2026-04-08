@@ -177,10 +177,16 @@ async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
 
 
 async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResult:
-    """Route to forum or news strategy based on source type."""
+    """Route to platform-specific strategy."""
     source_type = source.get("source_type", "news")
+    url = source.get("url", "")
+
     if source_type == "forum":
         return await _scrape_forum_source(brand, model, source)
+    elif "alvolante.it" in url:
+        # AlVolante: editorial pages WITH user comments — use forum strategy
+        # (search → scrape → parse comments) but with news-style queries
+        return await _scrape_alvolante_source(brand, model, source)
     else:
         return await _scrape_news_source(brand, model, source)
 
@@ -306,6 +312,104 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
 
     return SourceResult(
         source=name, source_type="forum",
+        status="ok" if items else "partial",
+        result_count=len(items), credits_used=total_credits,
+        items=items, duration_ms=int((time.time() - start) * 1000),
+    )
+
+
+async def _scrape_alvolante_source(brand: str, model: str, source: dict) -> SourceResult:
+    """AlVolante strategy: search for articles → scrape full pages → parse comments.
+
+    AlVolante articles (prova, primo_contatto, news) have user comments embedded
+    in the page — up to 100+ per article. No pagination needed.
+    """
+    start = time.time()
+    name = source.get("name", "Unknown")
+    url = source.get("url", "")
+    domain = url.replace("https://", "").replace("http://", "").rstrip("/")
+    model_context = build_model_context(brand, model)
+    search_terms = _build_search_terms(brand, model, model_context)
+
+    try:
+        client = FirecrawlClient()
+    except ValueError as e:
+        return SourceResult(source=name, source_type="news", status="error", error=str(e))
+
+    # Search for articles with comments (prova, primo_contatto, news sections)
+    found_urls = {}
+    total_credits = 0
+
+    for term in search_terms:
+        for suffix in ["prova", "primo contatto", "news", "opinioni"]:
+            query = f"site:{domain} {term} {suffix}"
+            logger.warning(f"[{name}] SEARCH: '{query}'")
+            resp = client.search(query, limit=10, recent_only=True)
+            total_credits += resp.credits_used
+
+            if resp.error:
+                logger.warning(f"[{name}] Search error: {resp.error}")
+                continue
+
+            for r in resp.results:
+                if r.url and r.url not in found_urls:
+                    found_urls[r.url] = {
+                        "title": r.title or "",
+                        "snippet": (r.content or "")[:300],
+                    }
+
+    if not found_urls:
+        return SourceResult(
+            source=name, source_type="news", status="partial",
+            credits_used=total_credits, error="No articles found",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    logger.warning(f"[{name}] Found {len(found_urls)} articles, scoring relevance...")
+    ranked = filter_and_rank(found_urls, brand, model, model_context)
+
+    if not ranked:
+        return SourceResult(
+            source=name, source_type="news", status="partial",
+            credits_used=total_credits,
+            error=f"No articles passed relevance filter",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    # Scrape full articles (comments are embedded — no multi-page needed)
+    items = []
+    for page_url, meta in ranked:
+        relevance_score = meta.get("score", 0)
+        logger.warning(f"[{name}] SCRAPE: {page_url} (relevance={relevance_score})")
+        resp = client.scrape(page_url)
+        total_credits += resp.credits_used
+
+        if resp.error:
+            logger.warning(f"[{name}] Scrape error: {resp.error}")
+            continue
+
+        full_content = resp.results[0].content if resp.results else ""
+        title = resp.results[0].title if resp.results else meta.get("title", "")
+        logger.warning(f"[{name}] Scraped {page_url}: {len(full_content)} chars")
+
+        items.append({
+            "url": page_url,
+            "title": title,
+            "content": full_content[:5000],
+            "_full_content": full_content,
+            "content_length": len(full_content),
+            "relevance_score": relevance_score,
+            "scraped": True,
+        })
+
+    # Parse comments with Claude AI
+    await _clean_items_with_ai(items, name)
+
+    for item in items:
+        item.pop("_full_content", None)
+
+    return SourceResult(
+        source=name, source_type="news",
         status="ok" if items else "partial",
         result_count=len(items), credits_used=total_credits,
         items=items, duration_ms=int((time.time() - start) * 1000),
