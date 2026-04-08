@@ -149,21 +149,38 @@ def score_result(
             break
 
     # === RECENCY SIGNALS ===
-    # Boost threads with recent years in title/URL, penalize old ones
     all_text_with_url = f"{title_lower} {url_lower} {snippet_lower}"
-    found_recent = any(y in all_text_with_url for y in RECENT_YEARS)
-    found_old = [y for y in OLD_YEARS if y in all_text_with_url]
+
+    # Check for years in text (title, snippet)
+    found_recent = any(y in f"{title_lower} {snippet_lower}" for y in RECENT_YEARS)
+    found_old = [y for y in OLD_YEARS if y in f"{title_lower} {snippet_lower}"]
 
     if found_recent:
         score += 15
-        reasons.append(f"+15 recency: recent year found")
+        reasons.append("+15 recency: recent year found")
     elif found_old:
-        # Penalize old threads — the older, the worse
         oldest = min(int(y) for y in found_old)
         age = CURRENT_YEAR - oldest
-        penalty = min(age * 3, 20)  # -3 per year, max -20
+        penalty = min(age * 3, 25)
         score -= penalty
         reasons.append(f"-{penalty} recency: year {oldest} found ({age}y old)")
+
+    # Forum topic ID heuristic: lower IDs = older threads
+    # IPS forums: /topic/2633-xxx (low = old), /topic/83225-xxx (high = recent)
+    # XenForo: /threads/thread-name.1334 (low = old), .137455 (high = recent)
+    topic_match = re.search(r'/topic/(\d+)', path) or re.search(r'\.(\d{3,6})/?$', path)
+    if topic_match:
+        topic_id = int(topic_match.group(1))
+        # Heuristic thresholds (approximate, works for autopareri/quattroruote)
+        if topic_id < 30000:
+            score -= 20
+            reasons.append(f"-20 recency: low topic ID {topic_id} (likely very old)")
+        elif topic_id < 50000:
+            score -= 10
+            reasons.append(f"-10 recency: medium-low topic ID {topic_id} (likely old)")
+        elif topic_id > 75000:
+            score += 10
+            reasons.append(f"+10 recency: high topic ID {topic_id} (likely recent)")
 
     return score, reasons
 

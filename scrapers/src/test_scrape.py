@@ -157,7 +157,7 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
 
     for term in search_terms:
         logger.warning(f"[{name}] MAP: discovering URLs for '{term}'")
-        map_resp = client.map(url, search=term, limit=50)
+        map_resp = client.map(url, search=term, limit=20)
         total_credits += map_resp.credits_used
 
         if map_resp.error:
