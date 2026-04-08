@@ -242,9 +242,44 @@ def _parse_generic(markdown: str) -> list[dict]:
 # Shared utilities
 # =============================================================================
 
+def _strip_quotes(text: str) -> str:
+    """Remove quoted reply blocks (lines starting with >) from comment text.
+
+    On forums, replies often quote the parent comment. Including quotes means
+    the same text appears multiple times — once as the original comment and
+    once in every reply that quotes it. Stripping quotes gives us only the
+    user's OWN words.
+    """
+    lines = text.split('\n')
+    result = []
+    in_quote = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('>'):
+            in_quote = True
+            continue
+        if in_quote and not stripped:
+            # Blank line after quote block — end of quote
+            in_quote = False
+            continue
+        in_quote = False
+        # Also skip "XXX said:" and "Clicca per allargare" quote markers
+        if re.match(r'.*\bsaid:\s*$', stripped, re.IGNORECASE):
+            continue
+        if re.match(r'.*\bha scritto:\s*$', stripped, re.IGNORECASE):
+            continue
+        if 'Clicca per allargare' in stripped or 'Toggle Quote' in stripped:
+            continue
+        result.append(line)
+    return '\n'.join(result)
+
+
 def _clean_comment_text(raw: str) -> str:
     """Clean raw comment text — remove markdown noise, links, images, UI elements."""
     text = raw
+
+    # Strip quoted reply blocks FIRST (before other cleaning)
+    text = _strip_quotes(text)
 
     # Remove image markdown
     text = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', text)
@@ -268,8 +303,8 @@ def _clean_comment_text(raw: str) -> str:
     text = re.sub(r'^\d+\s*(?:yr|mo|wk|hr|min|sec)\s*$', '', text, flags=re.MULTILINE)
     # Remove empty lines and normalize whitespace
     lines = [line.strip() for line in text.split('\n') if line.strip()]
-    # Filter out very short noise lines (but keep > quotes)
-    lines = [l for l in lines if len(l) > 5 or l.startswith('>')]
+    # Filter out very short noise lines
+    lines = [l for l in lines if len(l) > 5]
     text = '\n'.join(lines)
 
     return text.strip()

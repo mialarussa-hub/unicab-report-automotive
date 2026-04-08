@@ -99,8 +99,8 @@ def _build_search_terms(brand: str, model: str, model_context: dict) -> list[str
             terms.append(variant)
     return terms
 
-# Max pages to scrape per source (controls credit usage)
-MAX_SCRAPE_PER_SOURCE = 2
+# Max threads to scrape per source
+MAX_SCRAPE_PER_SOURCE = 4
 # Max extra pages to scrape for paginated forum threads
 MAX_EXTRA_PAGES = 2
 
