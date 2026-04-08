@@ -169,12 +169,7 @@ async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
     url = source.get("url", "")
 
     if "reddit.com" in url:
-        # Try native API first, fallback to Firecrawl search-only
-        result = await _scrape_reddit_source(brand, model, source)
-        if result.status == "error" and "403" in (result.error or ""):
-            logger.warning(f"[{source.get('name')}] Reddit API blocked, using Firecrawl search fallback")
-            return await _scrape_reddit_via_firecrawl(brand, model, source)
-        return result
+        return await _scrape_reddit_source(brand, model, source)
     elif source_type == "youtube":
         return await _scrape_youtube_source(brand, model, source)
     else:
@@ -423,60 +418,92 @@ async def _clean_items_with_ai(items: list[dict], source_name: str):
 
 
 async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceResult:
-    """Scrape Reddit via native JSON API (free, no Firecrawl needed)."""
+    """Reddit strategy: PullPush.io archive API — posts + full comments, free, no IP blocks."""
     start = time.time()
     name = source.get("name", "Unknown")
     url = source.get("url", "")
 
-    # Extract subreddit from URL (e.g. "reddit.com/r/ItalyMotori" -> "ItalyMotori")
-    subreddit = "ItalyMotori"  # default
+    # Extract subreddit from URL
+    subreddit = "ItalyMotori"
     if "/r/" in url:
         parts = url.split("/r/")
         if len(parts) > 1:
             subreddit = parts[1].strip("/").split("/")[0]
 
+    model_context = build_model_context(brand, model)
+    search_terms = _build_search_terms(brand, model, model_context)
+
     client = RedditClient()
     try:
-        search_term = f"{brand} {model}".strip()
-        response = await client.collect(subreddit, search_term, max_posts=5, max_comments=20)
+        # Search with multiple term variants
+        all_posts = {}  # post_id -> post
+        for term in search_terms:
+            logger.warning(f"[{name}] PullPush: searching r/{subreddit} for '{term}'")
+            response = await client.collect(subreddit, term, max_posts=10, max_comments=30)
 
-        if response.error:
+            if response.error:
+                logger.warning(f"[{name}] PullPush error: {response.error}")
+                continue
+
+            for post in response.posts:
+                if post.post_id not in all_posts:
+                    all_posts[post.post_id] = post
+
+        if not all_posts:
             return SourceResult(
-                source=name, source_type="forum", status="error",
-                error=response.error, duration_ms=int((time.time() - start) * 1000),
+                source=name, source_type="forum", status="partial",
+                error=f"No Reddit posts found for r/{subreddit}",
+                duration_ms=int((time.time() - start) * 1000),
             )
 
+        # Build items with structured comment data
         items = []
-        for post in response.posts:
-            # Build content: post text + all comments
+        total_comments = 0
+        for post in all_posts.values():
+            # Build AI-ready comment list directly (no parsing needed — already structured)
+            ai_comments = []
+            for c in post.comments:
+                ai_comments.append({
+                    "author": c.author,
+                    "text": c.text,
+                    "sentiment": "neutro",  # will be overwritten by AI
+                    "topics": [],
+                })
+
+            # Build display content
             content_parts = []
             if post.selftext:
                 content_parts.append(post.selftext)
-
-            if post.comments:
-                content_parts.append(f"\n--- {len(post.comments)} commenti ---\n")
-                for c in post.comments:
-                    content_parts.append(f"[{c.author}] (score: {c.score}): {c.text}")
-
+            for c in post.comments:
+                content_parts.append(f"[{c.author}] (score: {c.score}): {c.text}")
             full_content = "\n\n".join(content_parts)
+
+            total_comments += len(post.comments)
 
             items.append({
                 "url": post.url,
                 "title": f"{post.title} (score: {post.score}, {post.num_comments} commenti)",
                 "content": full_content[:5000],
                 "content_length": len(full_content),
-                "comments": [f"[{c.author}]: {c.text}" for c in post.comments[:15]],
+                "ai_comments": ai_comments if ai_comments else None,
+                "ai_comment_count": len(ai_comments),
                 "scraped": True,
             })
 
+        logger.warning(f"[{name}] PullPush: {len(items)} posts, {total_comments} comments total")
+
+        # Run sentiment analysis on the comments
+        for item in items:
+            if item.get("ai_comments"):
+                cleaned = await _run_reddit_sentiment(item["ai_comments"], name)
+                if cleaned:
+                    item["ai_comments"] = cleaned
+
         return SourceResult(
-            source=name,
-            source_type="forum",
+            source=name, source_type="forum",
             status="ok" if items else "partial",
-            result_count=len(items),
-            credits_used=0,  # Reddit API is free
-            items=items,
-            duration_ms=int((time.time() - start) * 1000),
+            result_count=len(items), credits_used=0,
+            items=items, duration_ms=int((time.time() - start) * 1000),
         )
     except Exception as e:
         return SourceResult(
@@ -487,71 +514,74 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
         await client.close()
 
 
-async def _scrape_reddit_via_firecrawl(brand: str, model: str, source: dict) -> SourceResult:
-    """Fallback: use Firecrawl search to find Reddit posts (no direct scrape needed)."""
-    start = time.time()
-    name = source.get("name", "Unknown")
-    url = source.get("url", "")
-    search_term = f"{brand} {model}".strip()
+async def _run_reddit_sentiment(comments: list[dict], source_name: str) -> list[dict] | None:
+    """Run Claude sentiment analysis on pre-structured Reddit comments."""
+    import os, json
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return None
 
-    # Extract subreddit from URL
-    subreddit = "ItalyMotori"
-    if "/r/" in url:
-        parts = url.split("/r/")
-        if len(parts) > 1:
-            subreddit = parts[1].strip("/").split("/")[0]
+    comments_text = "\n\n".join(
+        f"[{i+1}] {c['author']}: {c['text'][:500]}"
+        for i, c in enumerate(comments)
+    )
+    if len(comments_text) > 30000:
+        comments_text = comments_text[:30000]
+
+    prompt = f"""Analizza questi commenti Reddit di utenti italiani su auto.
+Per OGNI commento restituisci sentiment e topics.
+
+Topics possibili: prezzo, motore, design, affidabilità, consumi, cambio, comfort, qualità, spazio, tecnologia, assistenza, valore, guida, rumorosità, sicurezza, batteria, autonomia, ricarica
+
+Restituisci un JSON array con UN oggetto per OGNI commento, nello stesso ordine:
+[{{"sentiment": "positivo|negativo|neutro|misto", "topics": ["topic1"]}}]
+
+SOLO il JSON array.
+
+Commenti:
+
+{comments_text}"""
 
     try:
-        client = FirecrawlClient()
-    except ValueError as e:
-        return SourceResult(source=name, source_type="forum", status="error", error=str(e))
+        import httpx
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 8192,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            if resp.status_code != 200:
+                return None
 
-    queries = [
-        f"site:reddit.com/r/{subreddit} {search_term}",
-        f"reddit {subreddit} {search_term} opinioni",
-    ]
+            data = resp.json()
+            text = ""
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    text += block.get("text", "")
+            text = text.strip()
+            if text.startswith("```"):
+                lines = text.split("\n")
+                text = "\n".join(lines[1:-1])
 
-    all_items = []
-    total_credits = 0
+            sentiments = json.loads(text)
+            for i, c in enumerate(comments):
+                if i < len(sentiments):
+                    c["sentiment"] = sentiments[i].get("sentiment", "neutro")
+                    c["topics"] = sentiments[i].get("topics", [])
 
-    for query in queries:
-        resp = client.search(query, limit=5)
-        total_credits += resp.credits_used
-
-        if resp.error:
-            logger.warning(f"[{name}] Firecrawl Reddit search error: {resp.error}")
-            continue
-
-        for r in resp.results:
-            if r.url and "reddit.com" in r.url and r.url not in [i["url"] for i in all_items]:
-                all_items.append({
-                    "url": r.url,
-                    "title": r.title or "",
-                    "content": (r.content or "")[:3000],
-                    "content_length": len(r.content or ""),
-                    "scraped": False,
-                })
-
-    # Run AI cleaning on the snippets
-    if all_items:
-        logger.warning(f"[{name}] Cleaning {len(all_items)} Reddit results with Claude AI")
-        combined_content = "\n\n---\n\n".join(
-            f"Post: {item['title']}\nURL: {item['url']}\n{item['content']}" for item in all_items
-        )
-        cleaned = await clean_and_extract(combined_content, name, f"reddit.com/r/{subreddit}")
-        if cleaned.get("cleaned") and cleaned.get("comments"):
-            # Add AI comments to the first item for display
-            all_items[0]["ai_comments"] = cleaned["comments"]
-            all_items[0]["ai_comment_count"] = cleaned["comment_count"]
-
-    return SourceResult(
-        source=name,
-        source_type="forum",
-        status="ok" if all_items else "partial",
-        result_count=len(all_items),
-        credits_used=total_credits,
-        items=all_items,
-        duration_ms=int((time.time() - start) * 1000),
+            logger.warning(f"[{source_name}] Reddit AI analyzed {len(comments)} comments")
+            return comments
+    except Exception as e:
+        logger.warning(f"[{source_name}] Reddit sentiment error: {e}")
+        return None
     )
 
 
