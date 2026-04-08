@@ -1,6 +1,7 @@
 """Scraping test orchestrator — 3-step: search → scrape → clean with AI."""
 
 import asyncio
+import re
 import time
 import logging
 from dataclasses import dataclass, field, asdict
@@ -9,6 +10,24 @@ from src.firecrawl_client import FirecrawlClient
 from src.youtube_client import YouTubeClient
 from src.reddit_client import RedditClient
 from src.content_cleaner import clean_and_extract
+
+
+def _normalize_forum_url(url: str) -> str:
+    """Strip pagination from forum URLs to get page 1 (which has the most comments).
+
+    Examples:
+        .../thread.149852/page-2  → .../thread.149852/
+        .../?page=188             → .../
+        .../?&page=3#comments     → .../#comments
+    """
+    # XenForo: /page-N at the end
+    url = re.sub(r'/page-\d+/?', '/', url)
+    # IPS/generic: ?page=N or ?&page=N
+    url = re.sub(r'[?&]page=\d+', '', url)
+    # Clean up leftover ? or &
+    url = re.sub(r'\?&', '?', url)
+    url = re.sub(r'\?$', '', url)
+    return url
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +161,11 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
             continue
 
         for r in resp.results:
-            if r.url and r.url not in found_urls:
-                found_urls[r.url] = {"title": r.title or "", "snippet": (r.content or "")[:300]}
+            if r.url:
+                # Normalize URL: strip pagination to get page 1 (most comments)
+                clean_url = _normalize_forum_url(r.url)
+                if clean_url not in found_urls:
+                    found_urls[clean_url] = {"title": r.title or "", "snippet": (r.content or "")[:300]}
 
     if not found_urls:
         return SourceResult(
