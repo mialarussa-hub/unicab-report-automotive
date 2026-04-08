@@ -582,7 +582,6 @@ Commenti:
     except Exception as e:
         logger.warning(f"[{source_name}] Reddit sentiment error: {e}")
         return None
-    )
 
 
 async def _scrape_youtube_source(brand: str, model: str, source: dict) -> SourceResult:
