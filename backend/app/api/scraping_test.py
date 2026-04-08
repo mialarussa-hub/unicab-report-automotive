@@ -60,7 +60,8 @@ async def run_scraping_test(
         for s in sources
     ]
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    # No timeout — scraping can take several minutes with multi-page forum crawling
+    async with httpx.AsyncClient(timeout=None) as client:
         resp = await client.post(
             f"{SCRAPERS_URL}/scrape/test",
             json={
