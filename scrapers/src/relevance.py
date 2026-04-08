@@ -6,6 +6,7 @@ Pure string-based scoring, no API calls. Runs on search result metadata
 
 import re
 import logging
+from datetime import datetime
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,13 @@ FORUM_THREAD_PATTERNS = {
 # Generic patterns for unknown forums
 GENERIC_THREAD_PATTERNS = {
     "good": [r"/threads?[./]", r"/topic/", r"/discussion/", r"/post/"],
-    "bad": [r"/forums?/?$", r"/categories?/?$", r"/members/", r"/login", r"/register"],
+    "bad": [r"/forums?/?$", r"/categories?/?$", r"/members/", r"/login", r"/register", r"/tags?/"],
 }
+
+# Current year for recency scoring
+CURRENT_YEAR = datetime.now().year
+RECENT_YEARS = {str(y) for y in range(CURRENT_YEAR - 1, CURRENT_YEAR + 1)}  # last year + this year
+OLD_YEARS = {str(y) for y in range(2000, CURRENT_YEAR - 3)}  # anything older than 3 years
 
 # Classifieds / listing domains to penalize
 LISTING_SIGNALS = [
@@ -141,6 +147,23 @@ def score_result(
             score -= 15
             reasons.append(f"-15 listing/classifieds signal: '{signal}'")
             break
+
+    # === RECENCY SIGNALS ===
+    # Boost threads with recent years in title/URL, penalize old ones
+    all_text_with_url = f"{title_lower} {url_lower} {snippet_lower}"
+    found_recent = any(y in all_text_with_url for y in RECENT_YEARS)
+    found_old = [y for y in OLD_YEARS if y in all_text_with_url]
+
+    if found_recent:
+        score += 15
+        reasons.append(f"+15 recency: recent year found")
+    elif found_old:
+        # Penalize old threads — the older, the worse
+        oldest = min(int(y) for y in found_old)
+        age = CURRENT_YEAR - oldest
+        penalty = min(age * 3, 20)  # -3 per year, max -20
+        score -= penalty
+        reasons.append(f"-{penalty} recency: year {oldest} found ({age}y old)")
 
     return score, reasons
 

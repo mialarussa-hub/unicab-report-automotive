@@ -66,7 +66,7 @@ class FirecrawlClient:
             if recent_only:
                 kwargs["tbs"] = "qdr:y"
             if with_markdown:
-                kwargs["scrapeOptions"] = {"formats": ["markdown"]}
+                kwargs["scrape_options"] = {"formats": ["markdown"]}
             response = self.app.search(query, **kwargs)
 
             results = []
