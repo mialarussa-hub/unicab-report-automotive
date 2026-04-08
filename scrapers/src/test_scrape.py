@@ -217,7 +217,12 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
     # Multiple query suffixes for coverage
     suffixes = ["", "opinioni", "problemi difetti", "proprietari esperienza", "consumi"]
 
-    for term in search_terms:
+    # Also search with just the brand (catches generic brand threads like "BYD supera Tesla")
+    all_terms = list(search_terms)
+    if model:
+        all_terms.append(brand)  # brand-only query as fallback
+
+    for term in all_terms:
         for suffix in suffixes:
             query = f"site:{domain} {term} {suffix}".strip()
             logger.warning(f"[{name}] SEARCH: '{query}'")
@@ -340,7 +345,11 @@ async def _scrape_alvolante_source(brand: str, model: str, source: dict) -> Sour
     found_urls = {}
     total_credits = 0
 
-    for term in search_terms:
+    all_terms = list(search_terms)
+    if model:
+        all_terms.append(brand)
+
+    for term in all_terms:
         for suffix in ["prova", "primo contatto", "news", "opinioni"]:
             query = f"site:{domain} {term} {suffix}"
             logger.warning(f"[{name}] SEARCH: '{query}'")
