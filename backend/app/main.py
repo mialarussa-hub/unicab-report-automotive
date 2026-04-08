@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import auth, reports, data, sentiment, adv, scraping_test, sources
@@ -30,6 +31,12 @@ _local_static = Path(__file__).parent.parent.parent / "frontend" / "static"
 static_dir = _docker_static if _docker_static.exists() else _local_static
 if static_dir.exists():
     app.mount("/frontend/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.get("/")
+async def root():
+    """Redirect root to frontend login page."""
+    return RedirectResponse(url="/frontend/login")
 
 
 @app.get("/health")

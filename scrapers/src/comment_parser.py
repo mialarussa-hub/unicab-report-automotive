@@ -60,7 +60,12 @@ def _parse_xenforo(markdown: str) -> list[dict]:
         text = _clean_comment_text(raw_text)
 
         if text and len(text) > 15 and author:
-            # Skip staff-only messages and very short noise
+            # Skip sidebar thread titles (they have very short text and look like titles)
+            if len(text) < 80 and not any(c in text for c in ['.', ',', '!', '?', ':']):
+                continue
+            # Skip if author contains spaces with special chars (likely a thread title)
+            if len(author) > 40:
+                continue
             comments.append({"author": author, "text": text})
 
         i += 2
@@ -71,31 +76,35 @@ def _parse_xenforo(markdown: str) -> list[dict]:
 def _parse_ips(markdown: str) -> list[dict]:
     """Parse IPS/Invision Community markdown (autopareri.com).
 
-    Pattern: posts separated by horizontal rules or author blocks with dates.
+    Pattern: each comment starts with a date line like "August 4, 20241 yr"
+    The date format is: Month Day, YearXxx (year + relative time merged together)
     """
-    # IPS pattern: Look for date-like markers followed by content
-    # Or look for "Posted X ago" / dates that separate posts
+    # IPS date pattern: "Month Day, YYYY" possibly followed by relative time (no space)
+    # e.g. "August 4, 20241 yr" or "January 15, 2025"
+    months_en = "January|February|March|April|May|June|July|August|September|October|November|December"
+    months_it = "Gennaio|Febbraio|Marzo|Aprile|Maggio|Giugno|Luglio|Agosto|Settembre|Ottobre|Novembre|Dicembre"
+    date_pattern = rf'(?:^|\n)\s*(?:{months_en}|{months_it})\s+\d{{1,2}},?\s*\d{{4}}'
 
-    # Try splitting on common IPS separators
-    # Pattern: lines that look like dates or "Posted" markers
-    post_pattern = r'(?:^|\n)(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+,\s*\d{4})'
-    parts = re.split(post_pattern, markdown)
+    parts = re.split(date_pattern, markdown)
 
-    if len(parts) < 2:
-        # Try Italian dates
-        post_pattern = r'(?:^|\n)(?:(?:Gennaio|Febbraio|Marzo|Aprile|Maggio|Giugno|Luglio|Agosto|Settembre|Ottobre|Novembre|Dicembre)\s+\d+)'
-        parts = re.split(post_pattern, markdown)
-
-    if len(parts) < 2:
+    if len(parts) < 3:  # need at least header + 2 comments
         return []
 
     comments = []
-    for part in parts[1:]:  # skip header
+    for part in parts[1:]:  # skip everything before first date (header/nav)
         text = _clean_comment_text(part)
-        if text and len(text) > 30:
-            # Try to extract author from beginning of section
-            author_match = re.search(r'\[([A-Za-z0-9_\-\.]+)\]', part[:200])
-            author = author_match.group(1) if author_match else "anonimo"
+        if text and len(text) > 20:
+            # Try to find username — look for links with user profiles
+            author_match = re.search(r'\[([A-Za-z0-9_\-\.\ ]+)\]\(https?://[^)]*(?:members?|profile|user)[^)]*\)', part[:300])
+            if not author_match:
+                # Fallback: any bracketed name near the start
+                author_match = re.search(r'\[([A-Za-z0-9_\-\.\ ]+)\]', part[:200])
+            author = author_match.group(1).strip() if author_match else "anonimo"
+
+            # Skip if this looks like just reactions/UI
+            if len(text) < 30 and any(x in text.lower() for x in ["like", "thanks", "adoro", "haha"]):
+                continue
+
             comments.append({"author": author, "text": text})
 
     return comments
