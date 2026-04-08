@@ -11,8 +11,9 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-# Minimum score to proceed to scraping
-RELEVANCE_THRESHOLD = 30
+# Minimum score to proceed to scraping (raised: we scrape ALL that pass,
+# so the bar must be higher to avoid wasting credits)
+RELEVANCE_THRESHOLD = 50
 
 # URL patterns that indicate real discussion threads vs. index pages
 FORUM_THREAD_PATTERNS = {
@@ -194,19 +195,11 @@ def filter_and_rank(
     brand: str,
     model: str,
     model_context: dict,
-    max_results: int = 3,
 ) -> list[tuple[str, dict]]:
     """Score, filter, and rank search results.
 
-    Args:
-        found_urls: {url: {"title": ..., "snippet": ...}} dict from search step
-        brand, model: target car
-        model_context: from build_model_context()
-        max_results: max URLs to return for scraping
-
-    Returns:
-        List of (url, meta_with_score) tuples, sorted by score descending,
-        filtered by RELEVANCE_THRESHOLD.
+    Returns ALL URLs that pass the relevance threshold, sorted by score.
+    No artificial limit — scrape everything that's relevant.
     """
     scored = []
 
@@ -235,4 +228,4 @@ def filter_and_rank(
     # Sort by score descending
     scored.sort(key=lambda x: x[1]["score"], reverse=True)
 
-    return scored[:max_results]
+    return scored

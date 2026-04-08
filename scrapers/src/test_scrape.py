@@ -99,10 +99,8 @@ def _build_search_terms(brand: str, model: str, model_context: dict) -> list[str
             terms.append(variant)
     return terms
 
-# Max threads to scrape per source
-MAX_SCRAPE_PER_SOURCE = 4
 # Max extra pages to scrape for paginated forum threads
-MAX_EXTRA_PAGES = 2
+MAX_EXTRA_PAGES = 3
 
 
 @dataclass
@@ -257,7 +255,7 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
     logger.warning(f"[{name}] Total unique URLs: {len(found_urls)}, scoring relevance...")
 
     # --- STEP 2: Relevance scoring and filtering ---
-    ranked = filter_and_rank(found_urls, brand, model, model_context, max_results=MAX_SCRAPE_PER_SOURCE)
+    ranked = filter_and_rank(found_urls, brand, model, model_context)
 
     if not ranked:
         return SourceResult(
@@ -376,7 +374,7 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
     logger.warning(f"[{name}] Found {len(found_urls)} URLs with markdown, scoring relevance...")
 
     # --- STEP 2: Relevance scoring ---
-    ranked = filter_and_rank(found_urls, brand, model, model_context, max_results=MAX_SCRAPE_PER_SOURCE)
+    ranked = filter_and_rank(found_urls, brand, model, model_context)
 
     if not ranked:
         return SourceResult(
