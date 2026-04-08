@@ -33,6 +33,59 @@ def _normalize_forum_url(url: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+def _find_pagination_urls(markdown: str, base_url: str) -> list[str]:
+    """Extract pagination URLs from forum markdown.
+
+    Looks for patterns like:
+    - IPS: ?&page=2, ?&page=3 (autopareri.com)
+    - XenForo: /page-2, /page-3 (quattroruote.it)
+    """
+    pages = set()
+
+    # IPS pattern: links to ?&page=N or ?page=N
+    for match in re.finditer(r'(?:href=["\']|]\()([^"\')\s]*[?&]page=(\d+)[^"\')\s]*)', markdown):
+        page_num = int(match.group(2))
+        if 2 <= page_num <= 10:
+            pages.add(page_num)
+
+    # Also look for plain text pagination links in markdown: [2](url?page=2)
+    for match in re.finditer(r'\[(\d+)\]\(([^)]*[?&]page=\d+[^)]*)\)', markdown):
+        page_num = int(match.group(1))
+        url = match.group(2)
+        if 2 <= page_num <= 10:
+            pages.add(page_num)
+
+    # XenForo pattern: /page-N links
+    for match in re.finditer(r'\[(\d+)\]\(([^)]*?/page-(\d+)[^)]*)\)', markdown):
+        page_num = int(match.group(3))
+        if 2 <= page_num <= 10:
+            pages.add(page_num)
+
+    if not pages:
+        return []
+
+    # Build full URLs for pages 2, 3, etc.
+    sorted_pages = sorted(pages)
+    result = []
+    for page_num in sorted_pages:
+        # Construct page URL based on base URL format
+        if "autopareri.com" in base_url:
+            # IPS: append ?&page=N
+            clean_base = re.sub(r'[?&]page=\d+', '', base_url).rstrip('/')
+            result.append(f"{clean_base}/?&page={page_num}#comments")
+        elif "quattroruote.it" in base_url:
+            # XenForo: append /page-N
+            clean_base = re.sub(r'/page-\d+/?', '/', base_url).rstrip('/')
+            result.append(f"{clean_base}/page-{page_num}")
+        else:
+            # Generic: try ?page=N
+            clean_base = re.sub(r'[?&]page=\d+', '', base_url).rstrip('/')
+            sep = '&' if '?' in clean_base else '?'
+            result.append(f"{clean_base}{sep}page={page_num}")
+
+    return result
+
+
 def _build_search_terms(brand: str, model: str, model_context: dict) -> list[str]:
     """Generate search term variants from brand aliases and model name.
 
@@ -48,6 +101,8 @@ def _build_search_terms(brand: str, model: str, model_context: dict) -> list[str
 
 # Max pages to scrape per source (controls credit usage)
 MAX_SCRAPE_PER_SOURCE = 2
+# Max extra pages to scrape for paginated forum threads
+MAX_EXTRA_PAGES = 2
 
 
 @dataclass
@@ -212,9 +267,8 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    # --- STEP 3: Scrape the top-ranked threads ---
+    # --- STEP 3: Scrape the top-ranked threads (with multi-page for forums) ---
     items = []
-    ranked_meta = {u: m for u, m in ranked}
 
     for page_url, meta in ranked:
         relevance_score = meta.get("score", 0)
@@ -232,13 +286,28 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
             continue
 
         full_content = resp.results[0].content if resp.results else ""
-        logger.warning(f"[{name}] Scraped {page_url}: {len(full_content)} chars")
+        title = resp.results[0].title if resp.results else meta.get("title", "")
+        logger.warning(f"[{name}] Scraped page 1: {len(full_content)} chars")
+
+        # Multi-page: scrape additional pages if pagination detected
+        extra_pages = _find_pagination_urls(full_content, page_url)
+        if extra_pages:
+            logger.warning(f"[{name}] Found {len(extra_pages)} additional pages, scraping...")
+            for extra_url in extra_pages[:MAX_EXTRA_PAGES]:
+                extra_resp = client.scrape(extra_url)
+                total_credits += extra_resp.credits_used
+                if extra_resp.results and extra_resp.results[0].content:
+                    extra_content = extra_resp.results[0].content
+                    full_content += f"\n\n--- PAGE ---\n\n{extra_content}"
+                    logger.warning(f"[{name}] Scraped extra page: +{len(extra_content)} chars")
+
+        logger.warning(f"[{name}] Total content for {page_url}: {len(full_content)} chars")
 
         items.append({
             "url": page_url,
-            "title": resp.results[0].title if resp.results else meta.get("title", ""),
-            "content": (full_content or meta.get("snippet", ""))[:5000],  # truncated for API response
-            "_full_content": full_content,  # full content for AI parsing (not sent to frontend)
+            "title": title,
+            "content": (full_content or meta.get("snippet", ""))[:5000],
+            "_full_content": full_content,
             "content_length": len(full_content),
             "relevance_score": relevance_score,
             "scraped": True,
