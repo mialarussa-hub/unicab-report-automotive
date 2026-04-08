@@ -597,12 +597,23 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
 
         logger.warning(f"[{name}] Arctic Shift: {len(items)} posts, {total_comments} comments total")
 
-        # Run sentiment analysis on the comments
-        for item in items:
+        # Run sentiment analysis in ONE batch (not per-post — too many API calls)
+        all_comments = []
+        comment_map = []  # (item_index, comment_index) to map back
+        for i, item in enumerate(items):
             if item.get("ai_comments"):
-                cleaned = await _run_reddit_sentiment(item["ai_comments"], name)
-                if cleaned:
-                    item["ai_comments"] = cleaned
+                for j, c in enumerate(item["ai_comments"]):
+                    all_comments.append(c)
+                    comment_map.append((i, j))
+
+        if all_comments:
+            logger.warning(f"[{name}] Running sentiment on {len(all_comments)} Reddit comments (1 batch)")
+            analyzed = await _run_reddit_sentiment(all_comments, name)
+            if analyzed:
+                # Map results back to items
+                for idx, (i, j) in enumerate(comment_map):
+                    if idx < len(analyzed):
+                        items[i]["ai_comments"][j] = analyzed[idx]
 
         return SourceResult(
             source=name, source_type="forum",
