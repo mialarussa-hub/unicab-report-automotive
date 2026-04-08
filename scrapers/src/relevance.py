@@ -6,7 +6,6 @@ Pure string-based scoring, no API calls. Runs on search result metadata
 
 import re
 import logging
-from datetime import datetime
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -37,10 +36,6 @@ GENERIC_THREAD_PATTERNS = {
     "bad": [r"/forums?/?$", r"/categories?/?$", r"/members/", r"/login", r"/register", r"/tags?/"],
 }
 
-# Current year for recency scoring
-CURRENT_YEAR = datetime.now().year
-RECENT_YEARS = {str(y) for y in range(CURRENT_YEAR - 1, CURRENT_YEAR + 1)}  # last year + this year
-OLD_YEARS = {str(y) for y in range(2000, CURRENT_YEAR - 3)}  # anything older than 3 years
 
 # Classifieds / listing domains to penalize
 LISTING_SIGNALS = [
@@ -149,43 +144,9 @@ def score_result(
             reasons.append(f"-15 listing/classifieds signal: '{signal}'")
             break
 
-    # === RECENCY SIGNALS (heavily weighted — recent content is critical) ===
-
-    # Check for years in title/snippet
-    found_recent = any(y in f"{title_lower} {snippet_lower}" for y in RECENT_YEARS)
-    found_old = [y for y in OLD_YEARS if y in f"{title_lower} {snippet_lower}"]
-
-    if found_recent:
-        score += 25
-        reasons.append("+25 recency: recent year found")
-    elif found_old:
-        oldest = min(int(y) for y in found_old)
-        age = CURRENT_YEAR - oldest
-        penalty = min(age * 5, 40)  # -5 per year, max -40
-        score -= penalty
-        reasons.append(f"-{penalty} recency: year {oldest} found ({age}y old)")
-
-    # Forum topic ID heuristic — heavily weighted
-    # IPS (autopareri): /topic/2633 (2006) → /topic/83225 (2025)
-    # XenForo (QR): .1334 (old) → .147540 (2024)
-    topic_match = re.search(r'/topic/(\d+)', path) or re.search(r'\.(\d{3,6})/?$', path)
-    if topic_match:
-        topic_id = int(topic_match.group(1))
-        if topic_id < 30000:
-            score -= 35
-            reasons.append(f"-35 recency: topic ID {topic_id} (very old)")
-        elif topic_id < 50000:
-            score -= 20
-            reasons.append(f"-20 recency: topic ID {topic_id} (old)")
-        elif topic_id < 65000:
-            score -= 10
-            reasons.append(f"-10 recency: topic ID {topic_id} (somewhat old)")
-        elif topic_id > 78000:
-            score += 20
-            reasons.append(f"+20 recency: topic ID {topic_id} (recent)")
-        elif topic_id > 65000:
-            score += 5
-            reasons.append(f"+5 recency: topic ID {topic_id} (moderate)")
+    # Note: recency is now handled by the search layer (tbs=qdr:y filters to last 12 months).
+    # No need for year/topic-ID heuristics here — if a URL got through the time-filtered
+    # search, it's recent enough.
 
     return score, reasons
 

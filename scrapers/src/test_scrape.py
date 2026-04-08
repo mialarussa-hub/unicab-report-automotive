@@ -191,10 +191,15 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
 
 
 async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceResult:
-    """Forum strategy: MAP (1 credit) → relevance filter → scrape top N threads."""
+    """Forum strategy: time-filtered search → relevance filter → scrape all matches.
+
+    Uses Google's tbs=qdr:y (last 12 months) via Firecrawl search to only find
+    recent threads. Multiple query variants for coverage.
+    """
     start = time.time()
     name = source.get("name", "Unknown")
     url = source.get("url", "")
+    domain = url.replace("https://", "").replace("http://", "").rstrip("/")
     search_term = f"{brand} {model}".strip()
     model_context = build_model_context(brand, model)
     search_terms = _build_search_terms(brand, model, model_context)
@@ -204,55 +209,41 @@ async def _scrape_forum_source(brand: str, model: str, source: dict) -> SourceRe
     except ValueError as e:
         return SourceResult(source=name, source_type="forum", status="error", error=str(e))
 
-    # --- STEP 1: MAP the forum to discover thread URLs (1 credit per map call) ---
-    found_urls = {}  # url -> {title, snippet}
+    # --- STEP 1: Search with time filter (last 12 months) ---
+    found_urls = {}
     total_credits = 0
 
+    # Multiple query suffixes for coverage
+    suffixes = ["", "opinioni", "problemi difetti", "proprietari esperienza", "consumi"]
+
     for term in search_terms:
-        logger.warning(f"[{name}] MAP: discovering URLs for '{term}'")
-        map_resp = client.map(url, search=term, limit=20)
-        total_credits += map_resp.credits_used
+        for suffix in suffixes:
+            query = f"site:{domain} {term} {suffix}".strip()
+            logger.warning(f"[{name}] SEARCH: '{query}'")
+            resp = client.search(query, limit=10, recent_only=True)
+            total_credits += resp.credits_used
 
-        if map_resp.error:
-            logger.warning(f"[{name}] MAP error: {map_resp.error}")
-            continue
+            if resp.error:
+                logger.warning(f"[{name}] Search error: {resp.error}")
+                continue
 
-        logger.warning(f"[{name}] MAP found {len(map_resp.urls)} URLs")
-
-        for entry in map_resp.urls:
-            raw_url = entry.get("url", "")
-            if raw_url:
-                clean_url = _normalize_forum_url(raw_url)
-                if clean_url not in found_urls:
-                    found_urls[clean_url] = {
-                        "title": entry.get("title", ""),
-                        "snippet": entry.get("description", "")[:300],
-                    }
-
-    # Fallback: if MAP returned nothing, try search
-    if not found_urls:
-        logger.warning(f"[{name}] MAP returned no URLs, falling back to search")
-        for term in search_terms:
-            for suffix in ["opinioni", "problemi", "proprietari"]:
-                query = f"site:{url.replace('https://', '').replace('http://', '').rstrip('/')} {term} {suffix}"
-                resp = client.search(query, limit=5)
-                total_credits += resp.credits_used
-                if resp.error:
-                    continue
-                for r in resp.results:
-                    if r.url:
-                        clean_url = _normalize_forum_url(r.url)
-                        if clean_url not in found_urls:
-                            found_urls[clean_url] = {"title": r.title or "", "snippet": (r.content or "")[:300]}
+            for r in resp.results:
+                if r.url:
+                    clean_url = _normalize_forum_url(r.url)
+                    if clean_url not in found_urls:
+                        found_urls[clean_url] = {
+                            "title": r.title or "",
+                            "snippet": (r.content or "")[:300],
+                        }
 
     if not found_urls:
         return SourceResult(
             source=name, source_type="forum", status="partial",
-            credits_used=total_credits, error="No URLs found via MAP or search",
+            credits_used=total_credits, error="No recent URLs found in search",
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    logger.warning(f"[{name}] Total unique URLs: {len(found_urls)}, scoring relevance...")
+    logger.warning(f"[{name}] STEP 1 done: {len(found_urls)} unique URLs from last 12 months")
 
     # --- STEP 2: Relevance scoring and filtering ---
     ranked = filter_and_rank(found_urls, brand, model, model_context)
