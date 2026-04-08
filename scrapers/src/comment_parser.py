@@ -59,12 +59,10 @@ def _parse_xenforo(markdown: str) -> list[dict]:
         # Clean the comment text
         text = _clean_comment_text(raw_text)
 
-        if text and len(text) > 15 and author:
-            # Skip sidebar thread titles (they have very short text and look like titles)
-            if len(text) < 80 and not any(c in text for c in ['.', ',', '!', '?', ':']):
-                continue
-            # Skip if author contains spaces with special chars (likely a thread title)
-            if len(author) > 40:
+        if text and len(text) > 10 and author:
+            # Skip sidebar thread titles: long "author" names with special chars
+            if len(author) > 50 or "..." in author:
+                i += 2
                 continue
             comments.append({"author": author, "text": text})
 
