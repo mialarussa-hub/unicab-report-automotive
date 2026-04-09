@@ -155,6 +155,9 @@ async def run_test_scrape(brand: str, model: str = "", sources: list[dict] = Non
             source_results.append(result)
             total_credits += result.credits_used
 
+    # Generate AI summaries for all scraped content
+    await _generate_summaries_batch(source_results)
+
     total_ms = int((time.time() - start) * 1000)
 
     return asdict(TestScrapeResponse(
@@ -637,6 +640,85 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
         )
     finally:
         await client.close()
+
+
+async def _generate_summaries_batch(source_results: list) -> None:
+    """Generate AI summaries for all scraped items across all sources (1 call per source)."""
+    import os, json
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return
+
+    for source in source_results:
+        items = source.items or []
+        # Only summarize items that have content and were actually scraped
+        items_to_summarize = [
+            (i, item) for i, item in enumerate(items)
+            if item.get("scraped") and item.get("content") and len(item.get("content", "")) > 100
+        ]
+
+        if not items_to_summarize:
+            continue
+
+        # Build batch prompt
+        items_text = ""
+        for idx, (i, item) in enumerate(items_to_summarize):
+            title = item.get("title", "Senza titolo")
+            content = item.get("content", "")[:2000]  # first 2000 chars per item
+            items_text += f"\n\n--- ARTICOLO [{idx+1}] ---\nTitolo: {title}\nContenuto:\n{content}"
+
+        if len(items_text) > 40000:
+            items_text = items_text[:40000]
+
+        prompt = f"""Riassumi ogni articolo/thread/video qui sotto in 2-3 frasi in italiano.
+Concentrati su: argomento principale, opinione dominante, punti chiave.
+
+Restituisci un JSON array con UN oggetto per OGNI articolo, nello stesso ordine:
+[{{"summary": "riassunto 2-3 frasi"}}]
+
+SOLO il JSON array, nient'altro.
+
+{items_text}"""
+
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-sonnet-4-20250514",
+                        "max_tokens": 4096,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+                if resp.status_code != 200:
+                    logger.warning(f"[{source.source}] Summary API error: {resp.status_code}")
+                    continue
+
+                data = resp.json()
+                text = ""
+                for block in data.get("content", []):
+                    if block.get("type") == "text":
+                        text += block.get("text", "")
+                text = text.strip()
+                if text.startswith("```"):
+                    lines = text.split("\n")
+                    text = "\n".join(lines[1:-1])
+
+                summaries = json.loads(text)
+                for idx, (i, item) in enumerate(items_to_summarize):
+                    if idx < len(summaries):
+                        item["summary"] = summaries[idx].get("summary", "")
+
+                logger.warning(f"[{source.source}] Generated {len(summaries)} summaries")
+
+        except Exception as e:
+            logger.warning(f"[{source.source}] Summary generation error: {e}")
 
 
 async def _run_batch_sentiment(comments: list[dict], source_name: str,

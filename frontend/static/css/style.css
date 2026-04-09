@@ -415,6 +415,96 @@ footer {
     color: #333;
 }
 
+/* Item summary */
+.item-summary {
+    padding: 0.4rem 0.8rem;
+    margin: 0 0 0.3rem 0;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #555;
+    font-style: italic;
+    border-left: 3px solid #ddd;
+    background: #fafafa;
+}
+
+/* Sessions panel */
+.sessions-panel {
+    margin-bottom: 1.5rem;
+    background: #fff;
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.sessions-panel h3 {
+    margin: 0 0 0.8rem 0;
+    font-size: 1rem;
+    color: #333;
+}
+
+.sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.session-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    background: #f8f9fa;
+    transition: background 0.15s;
+}
+
+.session-item:hover { background: #e9ecef; }
+
+.session-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    flex: 1;
+}
+
+.session-info strong { font-size: 0.9rem; }
+
+.session-date {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.session-stats {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.session-delete {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.3rem;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+
+.session-delete:hover {
+    color: #e74c3c;
+    background: #fdeaea;
+}
+
+.session-badge {
+    background: #d4edda;
+    color: #155724;
+    padding: 0.15rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
 /* Sources page */
 .sources-page h1 { margin-bottom: 0.3rem; }
 .sources-page .subtitle { color: #666; margin-bottom: 1.5rem; }

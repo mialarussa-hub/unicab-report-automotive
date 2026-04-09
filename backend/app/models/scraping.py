@@ -1,0 +1,59 @@
+"""Scraping session and result models for persisting scraping data."""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import String, Text, Integer, Float, DateTime, ForeignKey, func
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class ScrapingSession(Base):
+    __tablename__ = "scraping_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="running")  # running, completed, failed
+    total_sources: Mapped[int] = mapped_column(Integer, default=0)
+    total_results: Mapped[int] = mapped_column(Integer, default=0)
+    total_comments: Mapped[int] = mapped_column(Integer, default=0)
+    total_credits: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+    # Relationships
+    results: Mapped[list["ScrapingResult"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class ScrapingResult(Base):
+    __tablename__ = "scraping_results"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("scraping_sessions.id", ondelete="CASCADE"),
+        index=True, nullable=False
+    )
+    source_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)  # forum, news, youtube
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_comments: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    comment_count: Mapped[int] = mapped_column(Integer, default=0)
+    view_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    like_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    channel: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    session: Mapped["ScrapingSession"] = relationship(back_populates="results")
