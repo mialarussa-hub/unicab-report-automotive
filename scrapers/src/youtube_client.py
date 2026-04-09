@@ -21,7 +21,7 @@ class YouTubeVideo:
     view_count: int = 0
     like_count: int = 0
     comment_count: int = 0
-    comments: list[str] = field(default_factory=list)
+    comments: list[dict] = field(default_factory=list)
     url: str = ""
 
     def __post_init__(self):
@@ -42,13 +42,14 @@ class YouTubeClient:
             logger.warning("YOUTUBE_API_KEY not set — YouTube scraping will be disabled")
         self.client = httpx.AsyncClient(timeout=15.0)
 
-    async def search_videos(self, query: str, max_results: int = 5) -> list[dict]:
+    async def search_videos(self, query: str, max_results: int = 5,
+                            published_after: str | None = None) -> list[dict]:
         """Search YouTube for videos matching the query."""
         if not self.api_key:
             return []
 
         try:
-            resp = await self.client.get(f"{YOUTUBE_API_BASE}/search", params={
+            params = {
                 "part": "snippet",
                 "q": query,
                 "type": "video",
@@ -56,7 +57,10 @@ class YouTubeClient:
                 "relevanceLanguage": "it",
                 "maxResults": max_results,
                 "key": self.api_key,
-            })
+            }
+            if published_after:
+                params["publishedAfter"] = published_after
+            resp = await self.client.get(f"{YOUTUBE_API_BASE}/search", params=params)
             resp.raise_for_status()
             data = resp.json()
             return data.get("items", [])
@@ -94,8 +98,8 @@ class YouTubeClient:
             logger.error(f"YouTube video details error: {e}")
             return {}
 
-    async def get_comments(self, video_id: str, max_results: int = 10) -> list[str]:
-        """Get top comments for a video."""
+    async def get_comments(self, video_id: str, max_results: int = 10) -> list[dict]:
+        """Get top comments for a video with author and like count."""
         if not self.api_key:
             return []
 
@@ -112,22 +116,27 @@ class YouTubeClient:
 
             comments = []
             for item in data.get("items", []):
-                text = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
-                comments.append(text)
+                snippet = item["snippet"]["topLevelComment"]["snippet"]
+                comments.append({
+                    "author": snippet.get("authorDisplayName", ""),
+                    "text": snippet.get("textDisplay", ""),
+                    "like_count": int(snippet.get("likeCount", 0)),
+                })
             return comments
 
         except Exception as e:
             logger.error(f"YouTube comments error for {video_id}: {e}")
             return []
 
-    async def collect(self, query: str, max_videos: int = 5, max_comments: int = 10) -> YouTubeResponse:
+    async def collect(self, query: str, max_videos: int = 5, max_comments: int = 10,
+                      published_after: str | None = None) -> YouTubeResponse:
         """Full collection: search + details + comments."""
         if not self.api_key:
             return YouTubeResponse(error="YOUTUBE_API_KEY not configured")
 
         try:
             # Search
-            search_results = await self.search_videos(query, max_videos)
+            search_results = await self.search_videos(query, max_videos, published_after)
             if not search_results:
                 return YouTubeResponse(error="No videos found")
 

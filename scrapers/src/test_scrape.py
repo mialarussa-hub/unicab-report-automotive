@@ -617,7 +617,7 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
 
         if all_comments:
             logger.warning(f"[{name}] Running sentiment on {len(all_comments)} Reddit comments (1 batch)")
-            analyzed = await _run_reddit_sentiment(all_comments, name)
+            analyzed = await _run_batch_sentiment(all_comments, name, "Reddit")
             if analyzed:
                 # Map results back to items
                 for idx, (i, j) in enumerate(comment_map):
@@ -639,8 +639,9 @@ async def _scrape_reddit_source(brand: str, model: str, source: dict) -> SourceR
         await client.close()
 
 
-async def _run_reddit_sentiment(comments: list[dict], source_name: str) -> list[dict] | None:
-    """Run Claude sentiment analysis on pre-structured Reddit comments."""
+async def _run_batch_sentiment(comments: list[dict], source_name: str,
+                               source_label: str = "Reddit") -> list[dict] | None:
+    """Run Claude sentiment analysis on pre-structured comments (Reddit, YouTube, etc.)."""
     import os, json
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -653,7 +654,7 @@ async def _run_reddit_sentiment(comments: list[dict], source_name: str) -> list[
     if len(comments_text) > 30000:
         comments_text = comments_text[:30000]
 
-    prompt = f"""Analizza questi commenti Reddit di utenti italiani su auto.
+    prompt = f"""Analizza questi commenti {source_label} di utenti italiani su auto.
 Per OGNI commento restituisci sentiment e topics.
 
 Topics possibili: prezzo, motore, design, affidabilità, consumi, cambio, comfort, qualità, spazio, tecnologia, assistenza, valore, guida, rumorosità, sicurezza, batteria, autonomia, ricarica
@@ -702,15 +703,15 @@ Commenti:
                     c["sentiment"] = sentiments[i].get("sentiment", "neutro")
                     c["topics"] = sentiments[i].get("topics", [])
 
-            logger.warning(f"[{source_name}] Reddit AI analyzed {len(comments)} comments")
+            logger.warning(f"[{source_name}] {source_label} AI analyzed {len(comments)} comments")
             return comments
     except Exception as e:
-        logger.warning(f"[{source_name}] Reddit sentiment error: {e}")
+        logger.warning(f"[{source_name}] {source_label} sentiment error: {e}")
         return None
 
 
 async def _scrape_youtube_source(brand: str, model: str, source: dict) -> SourceResult:
-    """Scrape YouTube source with comments."""
+    """Scrape YouTube source with comments and sentiment analysis."""
     start = time.time()
     name = source.get("name", "Unknown")
     url = source.get("url", "")
@@ -728,11 +729,18 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
         queries = [
             f"{channel_name} {search_term} recensione".strip(),
             f"{channel_name} {search_term} prova".strip(),
+            f"{channel_name} {search_term} test drive".strip(),
+            f"{channel_name} {search_term} opinioni proprietari".strip(),
         ]
+
+        # Filter to videos from the last 18 months
+        from datetime import datetime, timedelta
+        cutoff = (datetime.utcnow() - timedelta(days=540)).strftime("%Y-%m-%dT00:00:00Z")
 
         all_videos = {}
         for query in queries:
-            response = await client.collect(query, max_videos=3, max_comments=15)
+            response = await client.collect(query, max_videos=3, max_comments=15,
+                                            published_after=cutoff)
             if response.error:
                 logger.warning(f"[{name}] YouTube error for '{query}': {response.error}")
                 continue
@@ -747,17 +755,62 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
                 duration_ms=int((time.time() - start) * 1000),
             )
 
-        items = [{
-            "url": v.url,
-            "title": v.title,
-            "channel": v.channel,
-            "view_count": v.view_count,
-            "like_count": v.like_count,
-            "content": v.description[:500],
-            "comments": v.comments[:15],
-            "content_length": len(v.description) + sum(len(c) for c in v.comments),
-            "scraped": True,
-        } for v in all_videos.values()]
+        # Build items with structured comments (same pattern as Reddit)
+        items = []
+        total_comments = 0
+        for v in all_videos.values():
+            # Sort comments by like_count descending, take top 15
+            sorted_comments = sorted(v.comments, key=lambda c: c.get("like_count", 0), reverse=True)[:15]
+
+            # Build ai_comments structure
+            ai_comments = []
+            for c in sorted_comments:
+                ai_comments.append({
+                    "author": c.get("author", ""),
+                    "text": c.get("text", ""),
+                    "sentiment": "neutro",
+                    "topics": [],
+                })
+
+            # Build display content
+            content_parts = [v.description[:500]] if v.description else []
+            for c in sorted_comments:
+                content_parts.append(f"[{c.get('author', '')}] (likes: {c.get('like_count', 0)}): {c.get('text', '')}")
+            full_content = "\n\n".join(content_parts)
+
+            total_comments += len(ai_comments)
+
+            items.append({
+                "url": v.url,
+                "title": f"{v.title} ({v.channel})",
+                "channel": v.channel,
+                "view_count": v.view_count,
+                "like_count": v.like_count,
+                "content": full_content[:5000],
+                "content_length": len(full_content),
+                "ai_comments": ai_comments if ai_comments else None,
+                "ai_comment_count": len(ai_comments),
+                "scraped": True,
+            })
+
+        logger.warning(f"[{name}] YouTube: {len(items)} videos, {total_comments} comments total")
+
+        # Run sentiment analysis in ONE batch (same pattern as Reddit)
+        all_comments = []
+        comment_map = []
+        for i, item in enumerate(items):
+            if item.get("ai_comments"):
+                for j, c in enumerate(item["ai_comments"]):
+                    all_comments.append(c)
+                    comment_map.append((i, j))
+
+        if all_comments:
+            logger.warning(f"[{name}] Running sentiment on {len(all_comments)} YouTube comments (1 batch)")
+            analyzed = await _run_batch_sentiment(all_comments, name, "YouTube")
+            if analyzed:
+                for idx, (i, j) in enumerate(comment_map):
+                    if idx < len(analyzed):
+                        items[i]["ai_comments"][j] = analyzed[idx]
 
         return SourceResult(
             source=name, source_type="youtube", status="ok" if items else "partial",

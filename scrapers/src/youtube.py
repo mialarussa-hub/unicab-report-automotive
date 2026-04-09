@@ -22,7 +22,7 @@ class YouTubeResult:
     view_count: int = 0
     like_count: int = 0
     description: str = ""
-    comments: list[str] = field(default_factory=list)
+    comments: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -58,7 +58,7 @@ async def scrape_youtube(brand: str, model: str = "") -> YouTubeResponse:
                         view_count=video.view_count,
                         like_count=video.like_count,
                         description=video.description[:500],
-                        comments=video.comments[:10],
+                        comments=video.comments[:10],  # list[dict] with author, text, like_count
                     ))
 
         if not all_results:
