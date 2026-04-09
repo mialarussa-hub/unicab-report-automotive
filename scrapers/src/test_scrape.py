@@ -720,33 +720,48 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
     try:
         search_term = f"{brand} {model}".strip()
 
-        # Extract channel context from URL
-        channel_name = ""
-        if "youtube.com" in url:
-            parts = url.rstrip("/").split("/")
-            channel_name = parts[-1].replace("@", "") if parts else ""
-
+        # Search WITHOUT channel name — YouTube relevance is better without it
+        # If we lock to a channel name, we get random results when the channel
+        # doesn't have content for that specific model
         queries = [
-            f"{channel_name} {search_term} recensione".strip(),
-            f"{channel_name} {search_term} prova".strip(),
-            f"{channel_name} {search_term} test drive".strip(),
-            f"{channel_name} {search_term} opinioni proprietari".strip(),
+            f"{search_term} recensione",
+            f"{search_term} prova su strada",
+            f"{search_term} test drive",
+            f"{search_term} opinioni",
         ]
 
         # Filter to videos from the last 18 months
         from datetime import datetime, timedelta
         cutoff = (datetime.utcnow() - timedelta(days=540)).strftime("%Y-%m-%dT00:00:00Z")
 
+        # Build relevance keywords for filtering
+        brand_lower = brand.lower()
+        model_lower = model.lower() if model else ""
+        # Split model into parts for flexible matching (e.g. "500 XL" -> ["500", "xl"])
+        model_parts = model_lower.split() if model_lower else []
+
         all_videos = {}
         for query in queries:
-            response = await client.collect(query, max_videos=3, max_comments=15,
+            response = await client.collect(query, max_videos=5, max_comments=15,
                                             published_after=cutoff)
             if response.error:
                 logger.warning(f"[{name}] YouTube error for '{query}': {response.error}")
                 continue
             for v in response.videos:
-                if v.video_id not in all_videos:
+                if v.video_id in all_videos:
+                    continue
+                # Relevance filter: title must mention brand or model
+                title_lower = v.title.lower()
+                desc_lower = v.description[:500].lower() if v.description else ""
+                text = f"{title_lower} {desc_lower}"
+
+                has_brand = brand_lower in text
+                has_model = any(p in text for p in model_parts) if model_parts else False
+
+                if has_brand or has_model:
                     all_videos[v.video_id] = v
+                else:
+                    logger.warning(f"[{name}] Skipped irrelevant video: '{v.title}'")
 
         if not all_videos:
             return SourceResult(
