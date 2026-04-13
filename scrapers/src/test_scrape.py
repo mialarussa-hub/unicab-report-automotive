@@ -10,7 +10,7 @@ from src.firecrawl_client import FirecrawlClient
 from src.youtube_client import YouTubeClient
 from src.reddit_client import RedditClient
 from src.content_cleaner import clean_and_extract
-from src.auto_brands import build_model_context
+from src.auto_brands import build_model_context, get_official_urls
 from src.relevance import filter_and_rank
 
 
@@ -184,7 +184,9 @@ async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResu
     source_type = source.get("source_type", "news")
     url = source.get("url", "")
 
-    if source_type == "forum":
+    if source_type == "official":
+        return await _scrape_official_source(brand, model, source)
+    elif source_type == "forum":
         return await _scrape_forum_source(brand, model, source)
     elif "alvolante.it" in url:
         # AlVolante: editorial pages WITH user comments — use forum strategy
@@ -919,5 +921,238 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
             source=name, source_type="youtube", status="error",
             error=str(e), duration_ms=int((time.time() - start) * 1000),
         )
+    finally:
+        await client.close()
+
+
+# ---------------------------------------------------------------------------
+# L1: Official manufacturer communication scraper
+# ---------------------------------------------------------------------------
+
+async def _scrape_official_source(brand: str, model: str, source: dict) -> SourceResult:
+    """L1 strategy: scrape official brand channels for manufacturer communication.
+
+    Combines two sub-strategies:
+    A) Official website — product pages, pricing, promotions via firecrawl map+scrape
+    B) Official YouTube — brand channel videos about the model
+    """
+    start = time.time()
+    name = source.get("name", "Unknown")
+    official = get_official_urls(brand)
+
+    if not official:
+        return SourceResult(
+            source=name, source_type="official", status="error",
+            error=f"No official URLs configured for brand '{brand}'",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    all_items = []
+    total_credits = 0
+
+    # A) Scrape official website
+    website = official.get("website")
+    if website:
+        web_items, web_credits = await _scrape_official_website(brand, model, website, name)
+        all_items.extend(web_items)
+        total_credits += web_credits
+
+    # B) Scrape official YouTube channel
+    yt_channel_id = official.get("youtube_channel_id")
+    if yt_channel_id:
+        yt_items = await _scrape_official_youtube(brand, model, yt_channel_id, name)
+        all_items.extend(yt_items)
+
+    # C) AI analysis — information extraction (not sentiment)
+    if all_items:
+        from src.content_cleaner import analyze_official_content
+        analyzed = await analyze_official_content(all_items, brand, model)
+        if analyzed:
+            for i, info in enumerate(analyzed):
+                if i < len(all_items):
+                    all_items[i]["ai_official_info"] = info
+
+    return SourceResult(
+        source=name, source_type="official", status="ok" if all_items else "partial",
+        result_count=len(all_items), credits_used=total_credits, items=all_items,
+        error=None if all_items else "No official content found",
+        duration_ms=int((time.time() - start) * 1000),
+    )
+
+
+async def _scrape_official_website(
+    brand: str, model: str, website_url: str, source_name: str
+) -> tuple[list[dict], int]:
+    """Scrape manufacturer's official website for model-specific pages.
+
+    Strategy: map() to discover URLs → filter by model relevance → scrape top pages.
+    Fallback: search() if map() finds nothing.
+
+    Returns (items, credits_used).
+    """
+    try:
+        client = FirecrawlClient()
+    except ValueError as e:
+        logger.error(f"[{source_name}] Firecrawl not available: {e}")
+        return [], 0
+
+    model_context = build_model_context(brand, model)
+    model_lower = model.lower()
+    # Include model variants for matching
+    variant_terms = [model_lower] + [v.lower() for v in model_context.get("model_variants", [])]
+
+    total_credits = 0
+    items = []
+
+    # Step 1: Discover URLs on the brand site using map()
+    logger.warning(f"[{source_name}] MAP: {website_url} search='{model}'")
+    map_resp = client.map(website_url, search=model, limit=20)
+    total_credits += map_resp.credits_used
+
+    relevant_urls = []
+    if not map_resp.error and map_resp.urls:
+        for u in map_resp.urls:
+            url = u.get("url", "")
+            title = u.get("title", "")
+            desc = u.get("description", "")
+            combined = f"{url} {title} {desc}".lower()
+
+            # Check if any model term appears in the URL/title/description
+            if any(term in combined for term in variant_terms):
+                relevant_urls.append(u)
+
+    # Fallback: if map() found nothing, try search()
+    if not relevant_urls:
+        domain = website_url.replace("https://", "").replace("http://", "").rstrip("/")
+        fallback_query = f"site:{domain} {brand} {model}"
+        logger.warning(f"[{source_name}] MAP found 0 relevant URLs, FALLBACK SEARCH: '{fallback_query}'")
+        search_resp = client.search(fallback_query, limit=5, recent_only=False)
+        total_credits += search_resp.credits_used
+        if not search_resp.error:
+            for r in search_resp.results:
+                relevant_urls.append({
+                    "url": r.url, "title": r.title, "description": r.content[:200],
+                })
+
+    if not relevant_urls:
+        logger.warning(f"[{source_name}] No relevant official pages found for {brand} {model}")
+        return [], total_credits
+
+    logger.warning(f"[{source_name}] Found {len(relevant_urls)} relevant official pages")
+
+    # Step 2: Scrape top pages (max 5 to control credits)
+    max_pages = min(5, len(relevant_urls))
+    for u in relevant_urls[:max_pages]:
+        page_url = u.get("url", "")
+        if not page_url:
+            continue
+
+        logger.warning(f"[{source_name}] SCRAPE: {page_url}")
+        resp = client.scrape(page_url)
+        total_credits += resp.credits_used
+
+        if resp.error or not resp.results:
+            logger.warning(f"[{source_name}] Scrape error: {resp.error}")
+            continue
+
+        content = resp.results[0].content
+        title = resp.results[0].title
+
+        if not content or len(content) < 100:
+            continue
+
+        items.append({
+            "url": page_url,
+            "title": title or u.get("title", ""),
+            "content": content[:10000],  # Cap for AI analysis
+            "content_length": len(content),
+            "source_type": "official",
+            "scraped": True,
+        })
+
+    return items, total_credits
+
+
+async def _scrape_official_youtube(
+    brand: str, model: str, channel_id: str, source_name: str
+) -> list[dict]:
+    """Scrape official brand YouTube channel for model-specific videos.
+
+    Uses channelId filter to only get videos from the brand's official channel.
+    NO comments (L1 = official communication only, user comments are L3).
+    """
+    from src.youtube_client import YouTubeClient
+    from datetime import datetime, timedelta
+
+    client = YouTubeClient()
+    if not client.api_key:
+        logger.warning(f"[{source_name}] YouTube API key not set, skipping official YouTube")
+        return []
+
+    try:
+        # Search for model in official channel (last 18 months)
+        published_after = (datetime.utcnow() - timedelta(days=548)).strftime("%Y-%m-%dT00:00:00Z")
+        query = f"{brand} {model}"
+        logger.warning(f"[{source_name}] YouTube official channel search: '{query}' (channel={channel_id})")
+
+        results = await client.search_videos(
+            query, max_results=5,
+            published_after=published_after,
+            channel_id=channel_id,
+        )
+
+        if not results:
+            logger.warning(f"[{source_name}] No official YouTube videos found")
+            await client.close()
+            return []
+
+        # Get video details (views, likes)
+        video_ids = [
+            r["id"]["videoId"] for r in results
+            if r.get("id", {}).get("videoId")
+        ]
+
+        details = {}
+        if video_ids:
+            details = await client.get_video_details(video_ids)
+
+        items = []
+        for r in results:
+            vid_id = r.get("id", {}).get("videoId", "")
+            snippet = r.get("snippet", {})
+            title = snippet.get("title", "")
+            description = snippet.get("description", "")
+            channel = snippet.get("channelTitle", "")
+
+            # Check relevance — title or description should mention the model
+            model_context = build_model_context(brand, model)
+            model_lower = model.lower()
+            variant_terms = [model_lower] + [v.lower() for v in model_context.get("model_variants", [])]
+            combined = f"{title} {description}".lower()
+
+            if not any(term in combined for term in variant_terms):
+                continue
+
+            vid_details = details.get(vid_id, {})
+            stats = vid_details.get("statistics", {})
+
+            items.append({
+                "url": f"https://www.youtube.com/watch?v={vid_id}",
+                "title": title,
+                "content": description[:5000],
+                "content_length": len(description),
+                "source_type": "official",
+                "scraped": True,
+                "view_count": int(stats.get("viewCount", 0)),
+                "like_count": int(stats.get("likeCount", 0)),
+                "channel": channel,
+            })
+
+        logger.warning(f"[{source_name}] Found {len(items)} relevant official YouTube videos")
+        return items
+
+    except Exception as e:
+        logger.error(f"[{source_name}] Official YouTube error: {e}")
+        return []
     finally:
         await client.close()

@@ -622,3 +622,67 @@ footer {
 
 .empty-state { color: #888; font-style: italic; padding: 2rem 0; }
 .loading-small { color: #888; padding: 1rem 0; }
+
+/* L1: Official brand communication cards */
+.official-info {
+    padding: 0.75rem;
+    background: #f0f4ff;
+    border-left: 4px solid #1a56db;
+    border-radius: 6px;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.official-tipo { margin-bottom: 0.5rem; }
+.official-tipo-badge {
+    display: inline-block;
+    background: #1a56db;
+    color: white;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.official-tono {
+    display: inline-block;
+    background: #e8edff;
+    color: #1a56db;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    margin-left: 0.3rem;
+}
+
+.official-positioning { margin-bottom: 0.4rem; }
+.official-claim {
+    font-style: italic;
+    color: #1a56db;
+    font-size: 1rem;
+    margin-bottom: 0.6rem;
+    padding: 0.3rem 0;
+}
+
+.official-section { margin-bottom: 0.5rem; }
+.official-section ul {
+    margin: 0.25rem 0 0 1.2rem;
+    padding: 0;
+}
+.official-section li { margin-bottom: 0.15rem; }
+
+.official-price {
+    margin-bottom: 0.4rem;
+    color: #0a8f2e;
+    font-weight: 500;
+}
+
+.official-tags { margin-bottom: 0.4rem; }
+.topic-tag.engine { background: #e6f7e6; color: #0a8f2e; }
+.topic-tag.feature { background: #fff3e6; color: #c56000; }
+
+.official-target { margin-top: 0.4rem; color: #666; }
+
+.scrape-badge.official {
+    background: #e8edff;
+    color: #1a56db;
+    font-weight: 600;
+}

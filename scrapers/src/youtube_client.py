@@ -43,8 +43,13 @@ class YouTubeClient:
         self.client = httpx.AsyncClient(timeout=15.0)
 
     async def search_videos(self, query: str, max_results: int = 5,
-                            published_after: str | None = None) -> list[dict]:
-        """Search YouTube for videos matching the query."""
+                            published_after: str | None = None,
+                            channel_id: str | None = None) -> list[dict]:
+        """Search YouTube for videos matching the query.
+
+        Args:
+            channel_id: If provided, restrict search to this channel only (for L1 official scraping).
+        """
         if not self.api_key:
             return []
 
@@ -60,6 +65,8 @@ class YouTubeClient:
             }
             if published_after:
                 params["publishedAfter"] = published_after
+            if channel_id:
+                params["channelId"] = channel_id
             resp = await self.client.get(f"{YOUTUBE_API_BASE}/search", params=params)
             resp.raise_for_status()
             data = resp.json()

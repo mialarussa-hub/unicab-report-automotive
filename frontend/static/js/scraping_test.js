@@ -5,6 +5,7 @@ const TYPE_ICONS = {
     news: '\uD83D\uDCF0',
     youtube: '\u25B6\uFE0F',
     social: '\uD83D\uDC65',
+    official: '\uD83C\uDFE2',
 };
 
 const STATUS_LABELS = {
@@ -239,8 +240,13 @@ function createResultItem(item, sourceType) {
     }
 
     // Build content display
+    // 0. L1: Official brand communication (priority)
+    if (item.ai_official_info) {
+        badges += `<span class="scrape-badge official">L1 Comunicazione ufficiale</span>`;
+        contentHtml = renderOfficialInfo(item.ai_official_info);
+    }
     // 1. AI-extracted comments (priority display)
-    if (item.ai_comments && item.ai_comments.length > 0) {
+    else if (item.ai_comments && item.ai_comments.length > 0) {
         contentHtml = renderAiComments(item.ai_comments);
     }
     // 2. Reddit/YouTube comments
@@ -289,6 +295,95 @@ function renderAiComments(comments) {
     }
     html += '</div>';
     return html;
+}
+
+function renderOfficialInfo(info) {
+    let html = '<div class="official-info">';
+
+    // Type + Positioning
+    const tipoLabel = {
+        pagina_prodotto: 'Pagina Prodotto', promozione: 'Promozione',
+        comunicato_stampa: 'Comunicato Stampa', video: 'Video Ufficiale',
+        configuratore: 'Configuratore', listino: 'Listino',
+    };
+    const tipo = tipoLabel[info.tipo_contenuto] || info.tipo_contenuto || 'Contenuto';
+    html += `<div class="official-tipo"><span class="official-tipo-badge">${escapeHtml(tipo)}</span>`;
+    if (info.tono_comunicazione) {
+        html += ` <span class="official-tono">${escapeHtml(info.tono_comunicazione)}</span>`;
+    }
+    html += `</div>`;
+
+    // Positioning & Claim
+    if (info.posizionamento) {
+        html += `<div class="official-positioning"><strong>Posizionamento:</strong> ${escapeHtml(info.posizionamento)}</div>`;
+    }
+    if (info.claim_principale) {
+        html += `<div class="official-claim">&laquo;${escapeHtml(info.claim_principale)}&raquo;</div>`;
+    }
+
+    // Selling points
+    if (info.punti_di_forza_comunicati && info.punti_di_forza_comunicati.length > 0) {
+        html += `<div class="official-section"><strong>Punti di forza comunicati:</strong><ul>`;
+        for (const p of info.punti_di_forza_comunicati) {
+            html += `<li>${escapeHtml(p)}</li>`;
+        }
+        html += `</ul></div>`;
+    }
+
+    // Price
+    if (info.prezzo && (info.prezzo.da || info.prezzo.a)) {
+        let priceText = '';
+        if (info.prezzo.da && info.prezzo.a) {
+            priceText = `Da ${formatCurrency(info.prezzo.da)} a ${formatCurrency(info.prezzo.a)}`;
+        } else if (info.prezzo.da) {
+            priceText = `Da ${formatCurrency(info.prezzo.da)}`;
+        } else {
+            priceText = `Fino a ${formatCurrency(info.prezzo.a)}`;
+        }
+        if (info.prezzo.note) priceText += ` (${escapeHtml(info.prezzo.note)})`;
+        html += `<div class="official-price"><strong>Prezzo:</strong> ${priceText}</div>`;
+    }
+
+    // Promotions
+    if (info.promozioni_attive && info.promozioni_attive.length > 0) {
+        html += `<div class="official-section"><strong>Promozioni attive:</strong><ul>`;
+        for (const promo of info.promozioni_attive) {
+            let promoText = escapeHtml(promo.descrizione || promo.tipo || '');
+            if (promo.rata_mensile) promoText += ` — rata ${formatCurrency(promo.rata_mensile)}/mese`;
+            html += `<li>${promoText}</li>`;
+        }
+        html += `</ul></div>`;
+    }
+
+    // Versions & Engines
+    if (info.versioni_disponibili && info.versioni_disponibili.length > 0) {
+        html += `<div class="official-tags"><strong>Versioni:</strong> `;
+        html += info.versioni_disponibili.map(v => `<span class="topic-tag">${escapeHtml(v)}</span>`).join(' ');
+        html += `</div>`;
+    }
+    if (info.motorizzazioni_citate && info.motorizzazioni_citate.length > 0) {
+        html += `<div class="official-tags"><strong>Motorizzazioni:</strong> `;
+        html += info.motorizzazioni_citate.map(m => `<span class="topic-tag engine">${escapeHtml(m)}</span>`).join(' ');
+        html += `</div>`;
+    }
+
+    // Features & Target
+    if (info.caratteristiche_evidenziate && info.caratteristiche_evidenziate.length > 0) {
+        html += `<div class="official-tags"><strong>Caratteristiche evidenziate:</strong> `;
+        html += info.caratteristiche_evidenziate.map(f => `<span class="topic-tag feature">${escapeHtml(f)}</span>`).join(' ');
+        html += `</div>`;
+    }
+    if (info.target_comunicato) {
+        html += `<div class="official-target"><strong>Target:</strong> ${escapeHtml(info.target_comunicato)}</div>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+function formatCurrency(amount) {
+    if (!amount) return '—';
+    return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
 }
 
 function formatNumber(n) {

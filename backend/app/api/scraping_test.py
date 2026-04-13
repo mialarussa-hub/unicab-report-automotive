@@ -112,6 +112,7 @@ async def run_scraping_test(
                     view_count=item.get("view_count"),
                     like_count=item.get("like_count"),
                     channel=item.get("channel"),
+                    official_info=item.get("ai_official_info"),  # L1: structured brand info
                 )
                 db.add(scraping_result)
                 total_results += 1
@@ -219,6 +220,8 @@ async def get_session(
             item["view_count"] = r.view_count
             item["like_count"] = r.like_count
             item["channel"] = r.channel
+        if r.official_info is not None:
+            item["ai_official_info"] = r.official_info
 
         sources_map[key]["items"].append(item)
 
