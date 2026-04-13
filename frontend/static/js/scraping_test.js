@@ -1,4 +1,4 @@
-// UNICAB — Scraping Test Frontend
+// UNICAB — Scraping Test Frontend (with real-time progress tracking)
 
 const TYPE_ICONS = {
     forum: '\uD83D\uDCAC',
@@ -14,6 +14,10 @@ const STATUS_LABELS = {
     error: { label: 'Errore', class: 'status-error' },
 };
 
+let activePollInterval = null;
+let activeTimerInterval = null;
+let scrapeStartTime = null;
+
 // Load previous sessions on page load
 document.addEventListener('DOMContentLoaded', loadSessions);
 
@@ -25,18 +29,16 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
     if (!brand) return;
 
     const submitBtn = document.getElementById('submit-btn');
-    const loading = document.getElementById('loading');
     const resultsContainer = document.getElementById('results');
     const resultsMeta = document.getElementById('results-meta');
 
     // Reset
     submitBtn.disabled = true;
-    loading.style.display = 'flex';
     resultsContainer.innerHTML = '';
     resultsMeta.style.display = 'none';
+    stopPolling();
 
     try {
-        // Cookie is sent automatically (httponly), no need for Authorization header
         const resp = await fetch('/api/scraping-test/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -46,17 +48,169 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
 
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
-        renderResults(data);
-        // Refresh sessions list
-        loadSessions();
+
+        if (data.status === 'running' && data.session_id) {
+            // Async mode — show progress and start polling
+            scrapeStartTime = Date.now();
+            renderProgressCard(data.sources_names || [], brand, model);
+            startPolling(data.session_id);
+        } else {
+            // Legacy sync fallback
+            renderResults(data);
+            loadSessions();
+            submitBtn.disabled = false;
+        }
 
     } catch (err) {
         resultsContainer.innerHTML = `<div class="error-banner">Errore: ${err.message}</div>`;
-    } finally {
         submitBtn.disabled = false;
-        loading.style.display = 'none';
     }
 });
+
+
+// ---------------------------------------------------------------------------
+// Polling
+// ---------------------------------------------------------------------------
+
+function startPolling(sessionId) {
+    activePollInterval = setInterval(async () => {
+        try {
+            const resp = await fetch(`/api/scraping-test/sessions/${sessionId}`, {
+                credentials: 'same-origin',
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            // Update progress card with completed sources
+            updateProgressCard(data);
+
+            if (data.status === 'completed' || data.status === 'failed') {
+                stopPolling();
+                renderResults(data, true);
+                loadSessions();
+                document.getElementById('submit-btn').disabled = false;
+            }
+        } catch (err) {
+            console.error('Poll error:', err);
+        }
+    }, 2500);
+
+    // Elapsed time counter
+    activeTimerInterval = setInterval(() => {
+        const timerEl = document.getElementById('progress-timer');
+        if (timerEl && scrapeStartTime) {
+            const elapsed = Math.floor((Date.now() - scrapeStartTime) / 1000);
+            timerEl.textContent = formatElapsed(elapsed);
+        }
+    }, 1000);
+}
+
+function stopPolling() {
+    if (activePollInterval) {
+        clearInterval(activePollInterval);
+        activePollInterval = null;
+    }
+    if (activeTimerInterval) {
+        clearInterval(activeTimerInterval);
+        activeTimerInterval = null;
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Progress Card (shown during scraping)
+// ---------------------------------------------------------------------------
+
+function renderProgressCard(sourceNames, brand, model) {
+    const container = document.getElementById('results');
+    const label = `${brand}${model ? ' ' + model : ''}`;
+
+    container.innerHTML = `
+        <div class="progress-card">
+            <div class="progress-header">
+                <div class="progress-title">
+                    <span class="spinner-inline"></span>
+                    Scraping <strong>${escapeHtml(label)}</strong>
+                </div>
+                <div class="progress-timer" id="progress-timer">0:00</div>
+            </div>
+            <div class="progress-sources" id="progress-sources">
+                ${sourceNames.map(name => `
+                    <div class="progress-source" data-source="${escapeHtml(name)}">
+                        <span class="progress-status-icon pending">\u23F3</span>
+                        <span class="progress-source-name">${escapeHtml(name)}</span>
+                        <span class="progress-source-detail">in attesa</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function updateProgressCard(data) {
+    const sourcesContainer = document.getElementById('progress-sources');
+    if (!sourcesContainer) return;
+
+    // Mark completed sources
+    const completedSources = new Set();
+    for (const source of (data.sources || [])) {
+        completedSources.add(source.source);
+
+        const el = sourcesContainer.querySelector(`[data-source="${CSS.escape(source.source)}"]`);
+        if (el) {
+            const icon = el.querySelector('.progress-status-icon');
+            const detail = el.querySelector('.progress-source-detail');
+
+            const resultCount = source.result_count || source.items?.length || 0;
+            const status = source.status || 'ok';
+
+            if (status === 'error') {
+                icon.textContent = '\u274C';
+                icon.className = 'progress-status-icon error';
+                detail.textContent = source.error || 'errore';
+                detail.className = 'progress-source-detail error';
+            } else {
+                icon.textContent = '\u2705';
+                icon.className = 'progress-status-icon done';
+
+                const commentCount = source.items?.reduce((sum, item) =>
+                    sum + (item.ai_comment_count || 0), 0) || 0;
+
+                let detailText = `${resultCount} risultat${resultCount === 1 ? 'o' : 'i'}`;
+                if (commentCount > 0) detailText += ` \u00B7 ${commentCount} commenti`;
+                detail.textContent = detailText;
+                detail.className = 'progress-source-detail done';
+            }
+        }
+    }
+
+    // Mark remaining sources as running (they're all parallel, so any not-completed is running)
+    const allSourceEls = sourcesContainer.querySelectorAll('.progress-source');
+    for (const el of allSourceEls) {
+        const name = el.dataset.source;
+        if (!completedSources.has(name)) {
+            const icon = el.querySelector('.progress-status-icon');
+            const detail = el.querySelector('.progress-source-detail');
+            if (icon.className.includes('pending')) {
+                icon.textContent = '\uD83D\uDD04';
+                icon.className = 'progress-status-icon running';
+                detail.textContent = 'scraping...';
+                detail.className = 'progress-source-detail running';
+            }
+        }
+    }
+}
+
+function formatElapsed(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------------
 
 async function loadSessions() {
     try {
@@ -82,11 +236,15 @@ async function loadSessions() {
                 hour: '2-digit', minute: '2-digit',
             });
 
+            const statusIcon = s.status === 'completed' ? '\u2705' :
+                               s.status === 'running' ? '\uD83D\uDD04' :
+                               s.status === 'failed' ? '\u274C' : '\u26AA';
+
             const el = document.createElement('div');
             el.className = 'session-item';
             el.innerHTML = `
                 <div class="session-info" onclick="loadSession('${s.id}')">
-                    <strong>${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
+                    <strong>${statusIcon} ${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
                     <span class="session-date">${dateStr}</span>
                     <span class="session-stats">${s.total_results} risultati \u00B7 ${s.total_comments} commenti</span>
                 </div>
@@ -134,13 +292,18 @@ async function deleteSession(sessionId, event) {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Results Rendering
+// ---------------------------------------------------------------------------
+
 function renderResults(data, fromSession = false) {
     const resultsContainer = document.getElementById('results');
     const resultsMeta = document.getElementById('results-meta');
 
     // Meta info
-    document.getElementById('meta-credits').textContent = `Credits Firecrawl: ${data.total_credits}`;
-    document.getElementById('meta-duration').textContent = `Durata: ${(data.total_duration_ms / 1000).toFixed(1)}s`;
+    document.getElementById('meta-credits').textContent = `Credits Firecrawl: ${data.total_credits || 0}`;
+    document.getElementById('meta-duration').textContent = `Durata: ${((data.total_duration_ms || 0) / 1000).toFixed(1)}s`;
     resultsMeta.style.display = 'flex';
 
     // Session badge
@@ -158,7 +321,7 @@ function renderResults(data, fromSession = false) {
 
     // Source cards
     resultsContainer.innerHTML = '';
-    for (const source of data.sources) {
+    for (const source of (data.sources || [])) {
         const card = createSourceCard(source);
         resultsContainer.appendChild(card);
     }
@@ -183,7 +346,7 @@ function createSourceCard(source) {
         <div class="source-meta">
             <span>${source.result_count} risultati</span>
             ${source.credits_used ? `<span>${source.credits_used} credits</span>` : ''}
-            <span>${(source.duration_ms / 1000).toFixed(1)}s</span>
+            <span>${((source.duration_ms || 0) / 1000).toFixed(1)}s</span>
         </div>
     `;
     card.appendChild(header);
@@ -313,7 +476,6 @@ function renderOfficialInfo(info) {
     }
     html += `</div>`;
 
-    // Positioning & Claim
     if (info.posizionamento) {
         html += `<div class="official-positioning"><strong>Posizionamento:</strong> ${escapeHtml(info.posizionamento)}</div>`;
     }
@@ -321,7 +483,6 @@ function renderOfficialInfo(info) {
         html += `<div class="official-claim">&laquo;${escapeHtml(info.claim_principale)}&raquo;</div>`;
     }
 
-    // Selling points
     if (info.punti_di_forza_comunicati && info.punti_di_forza_comunicati.length > 0) {
         html += `<div class="official-section"><strong>Punti di forza comunicati:</strong><ul>`;
         for (const p of info.punti_di_forza_comunicati) {
@@ -330,7 +491,6 @@ function renderOfficialInfo(info) {
         html += `</ul></div>`;
     }
 
-    // Price
     if (info.prezzo && (info.prezzo.da || info.prezzo.a)) {
         let priceText = '';
         if (info.prezzo.da && info.prezzo.a) {
@@ -344,18 +504,16 @@ function renderOfficialInfo(info) {
         html += `<div class="official-price"><strong>Prezzo:</strong> ${priceText}</div>`;
     }
 
-    // Promotions
     if (info.promozioni_attive && info.promozioni_attive.length > 0) {
         html += `<div class="official-section"><strong>Promozioni attive:</strong><ul>`;
         for (const promo of info.promozioni_attive) {
             let promoText = escapeHtml(promo.descrizione || promo.tipo || '');
-            if (promo.rata_mensile) promoText += ` — rata ${formatCurrency(promo.rata_mensile)}/mese`;
+            if (promo.rata_mensile) promoText += ` \u2014 rata ${formatCurrency(promo.rata_mensile)}/mese`;
             html += `<li>${promoText}</li>`;
         }
         html += `</ul></div>`;
     }
 
-    // Versions & Engines
     if (info.versioni_disponibili && info.versioni_disponibili.length > 0) {
         html += `<div class="official-tags"><strong>Versioni:</strong> `;
         html += info.versioni_disponibili.map(v => `<span class="topic-tag">${escapeHtml(v)}</span>`).join(' ');
@@ -367,7 +525,6 @@ function renderOfficialInfo(info) {
         html += `</div>`;
     }
 
-    // Features & Target
     if (info.caratteristiche_evidenziate && info.caratteristiche_evidenziate.length > 0) {
         html += `<div class="official-tags"><strong>Caratteristiche evidenziate:</strong> `;
         html += info.caratteristiche_evidenziate.map(f => `<span class="topic-tag feature">${escapeHtml(f)}</span>`).join(' ');
@@ -381,8 +538,13 @@ function renderOfficialInfo(info) {
     return html;
 }
 
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
 function formatCurrency(amount) {
-    if (!amount) return '—';
+    if (!amount) return '\u2014';
     return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
 }
 

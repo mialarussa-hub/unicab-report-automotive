@@ -11,13 +11,15 @@ app = FastAPI(title="UNICAB Scrapers", docs_url="/docs")
 class SourceConfig(BaseModel):
     name: str
     url: str
-    source_type: str  # forum, news, youtube, social
+    source_type: str  # forum, news, youtube, social, official
 
 
 class ScrapeTestRequest(BaseModel):
     brand: str
     model: str = ""
     sources: list[SourceConfig] = []
+    session_id: str | None = None
+    callback_url: str | None = None
 
 
 @app.get("/health")
@@ -29,5 +31,9 @@ async def health():
 async def scrape_test(request: ScrapeTestRequest):
     """Run scrapers using configured sources."""
     sources_dicts = [s.model_dump() for s in request.sources]
-    result = await run_test_scrape(request.brand, request.model, sources_dicts)
+    result = await run_test_scrape(
+        request.brand, request.model, sources_dicts,
+        session_id=request.session_id,
+        callback_url=request.callback_url,
+    )
     return result

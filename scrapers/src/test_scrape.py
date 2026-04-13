@@ -133,14 +133,44 @@ class TestScrapeResponse:
     total_duration_ms: int = 0
 
 
-async def run_test_scrape(brand: str, model: str = "", sources: list[dict] = None) -> dict:
-    """Run 2-step scrapers on configured sources."""
+async def run_test_scrape(
+    brand: str, model: str = "", sources: list[dict] = None,
+    session_id: str | None = None, callback_url: str | None = None,
+) -> dict:
+    """Run 2-step scrapers on configured sources.
+
+    If session_id and callback_url are provided, sends per-source results
+    to the backend as each source completes (for real-time progress tracking).
+    """
     start = time.time()
 
     if not sources:
         return asdict(TestScrapeResponse(brand=brand, model=model))
 
-    tasks = [_scrape_source(brand, model, source) for source in sources]
+    async def _scrape_and_notify(source: dict) -> SourceResult:
+        """Scrape one source and optionally notify backend when done."""
+        result = await _scrape_source(brand, model, source)
+
+        # Generate summaries for this source immediately
+        if result.items:
+            await _generate_summaries_batch([result])
+
+        # Notify backend that this source is done (for real-time progress)
+        if callback_url and session_id:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(callback_url, json={
+                        "session_id": session_id,
+                        "source_result": asdict(result),
+                    })
+                logger.warning(f"[{source.get('name', '?')}] Callback sent to backend")
+            except Exception as e:
+                logger.warning(f"[{source.get('name', '?')}] Callback failed: {e}")
+
+        return result
+
+    tasks = [_scrape_and_notify(source) for source in sources]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     source_results = []
@@ -154,9 +184,6 @@ async def run_test_scrape(brand: str, model: str = "", sources: list[dict] = Non
         elif isinstance(result, SourceResult):
             source_results.append(result)
             total_credits += result.credits_used
-
-    # Generate AI summaries for all scraped content
-    await _generate_summaries_batch(source_results)
 
     total_ms = int((time.time() - start) * 1000)
 
