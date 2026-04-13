@@ -687,6 +687,95 @@ footer {
     font-weight: 600;
 }
 
+/* Level sections — L1/L2/L3 grouping */
+.level-section {
+    margin-bottom: 1.5rem;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+.level-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    cursor: pointer;
+    user-select: none;
+    background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+
+.level-header:hover { background: #f0f1f3; }
+
+.level-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.level-title h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.level-icon { font-size: 1.25rem; }
+
+.level-count {
+    font-size: 0.8rem;
+    color: #888;
+    font-weight: 400;
+}
+
+.level-toggle {
+    font-size: 0.75rem;
+    color: #999;
+    transition: transform 0.25s;
+}
+
+.level-section.collapsed .level-toggle {
+    transform: rotate(-90deg);
+}
+
+.level-description {
+    padding: 0.4rem 1.2rem 0.6rem;
+    font-size: 0.82rem;
+    color: #888;
+    font-style: italic;
+}
+
+.level-body {
+    padding: 0.5rem 1rem 1rem;
+    transition: max-height 0.3s ease;
+}
+
+.level-section.collapsed .level-description,
+.level-section.collapsed .level-body {
+    display: none;
+}
+
+/* Level-specific accent colors */
+.level-section[data-level="L1"] .level-header { border-left: 4px solid #1a56db; }
+.level-section[data-level="L2"] .level-header { border-left: 4px solid #e67e22; }
+.level-section[data-level="L3"] .level-header { border-left: 4px solid #27ae60; }
+
+.level-section[data-level="L1"] .level-title h2 { color: #1a56db; }
+.level-section[data-level="L2"] .level-title h2 { color: #e67e22; }
+.level-section[data-level="L3"] .level-title h2 { color: #27ae60; }
+
+/* Source cards inside level sections get reduced outer styling */
+.level-body .source-card {
+    box-shadow: none;
+    border: 1px solid #eee;
+    margin-bottom: 0.6rem;
+}
+
+.level-body .source-card:last-child { margin-bottom: 0; }
+
 /* Progress card — real-time scraping feedback */
 .progress-card {
     background: white;

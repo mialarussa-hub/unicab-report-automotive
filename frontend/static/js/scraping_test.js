@@ -294,8 +294,39 @@ async function deleteSession(sessionId, event) {
 
 
 // ---------------------------------------------------------------------------
-// Results Rendering
+// Results Rendering — grouped by level (L1/L2/L3)
 // ---------------------------------------------------------------------------
+
+const LEVELS = [
+    {
+        key: 'L1',
+        label: 'L1 — Comunicazione Ufficiale',
+        icon: '\uD83C\uDFE2',
+        description: 'Informazioni dai canali ufficiali del brand',
+        types: ['official'],
+    },
+    {
+        key: 'L2',
+        label: 'L2 — Media e Giornalisti',
+        icon: '\uD83D\uDCF0',
+        description: 'Articoli, test e recensioni da fonti specializzate',
+        types: ['news'],
+    },
+    {
+        key: 'L3',
+        label: 'L3 — Commenti Utenti',
+        icon: '\uD83D\uDCAC',
+        description: 'Sentiment e opinioni da forum, social e YouTube',
+        types: ['forum', 'youtube', 'social'],
+    },
+];
+
+function getLevel(sourceType) {
+    for (const level of LEVELS) {
+        if (level.types.includes(sourceType)) return level.key;
+    }
+    return 'L3'; // default fallback
+}
 
 function renderResults(data, fromSession = false) {
     const resultsContainer = document.getElementById('results');
@@ -319,11 +350,62 @@ function renderResults(data, fromSession = false) {
         sessionBadge.style.display = 'none';
     }
 
-    // Source cards
-    resultsContainer.innerHTML = '';
+    // Group sources by level
+    const grouped = {};
+    for (const level of LEVELS) {
+        grouped[level.key] = [];
+    }
     for (const source of (data.sources || [])) {
-        const card = createSourceCard(source);
-        resultsContainer.appendChild(card);
+        const levelKey = getLevel(source.source_type);
+        grouped[levelKey].push(source);
+    }
+
+    // Render level sections
+    resultsContainer.innerHTML = '';
+    for (const level of LEVELS) {
+        const sources = grouped[level.key];
+        if (sources.length === 0) continue;
+
+        const totalResults = sources.reduce((sum, s) => sum + (s.result_count || s.items?.length || 0), 0);
+        const totalComments = sources.reduce((sum, s) =>
+            sum + (s.items || []).reduce((cs, item) => cs + (item.ai_comment_count || 0), 0), 0);
+
+        const section = document.createElement('div');
+        section.className = 'level-section';
+        section.dataset.level = level.key;
+
+        // Level header (clickable to expand/collapse)
+        const header = document.createElement('div');
+        header.className = 'level-header';
+        header.innerHTML = `
+            <div class="level-title">
+                <span class="level-icon">${level.icon}</span>
+                <h2>${level.label}</h2>
+                <span class="level-count">${sources.length} font${sources.length === 1 ? 'e' : 'i'} &middot; ${totalResults} risultat${totalResults === 1 ? 'o' : 'i'}${totalComments > 0 ? ` &middot; ${totalComments} commenti` : ''}</span>
+            </div>
+            <span class="level-toggle">\u25BC</span>
+        `;
+        header.addEventListener('click', () => {
+            section.classList.toggle('collapsed');
+        });
+        section.appendChild(header);
+
+        // Level description
+        const desc = document.createElement('div');
+        desc.className = 'level-description';
+        desc.textContent = level.description;
+        section.appendChild(desc);
+
+        // Source cards inside the level
+        const body = document.createElement('div');
+        body.className = 'level-body';
+        for (const source of sources) {
+            const card = createSourceCard(source);
+            body.appendChild(card);
+        }
+        section.appendChild(body);
+
+        resultsContainer.appendChild(section);
     }
 }
 
