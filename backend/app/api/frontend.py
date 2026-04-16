@@ -112,6 +112,14 @@ async def scraping_test_page(request: Request, db: AsyncSession = Depends(get_db
     return templates.TemplateResponse(request, "scraping_test.html", {"user": user})
 
 
+@router.get("/timesheet", response_class=HTMLResponse)
+async def timesheet_page(request: Request, db: AsyncSession = Depends(get_db)):
+    user = await _get_user_from_cookie(request, db)
+    if not user:
+        return RedirectResponse(url="/frontend/login")
+    return templates.TemplateResponse(request, "timesheet.html", {"user": user})
+
+
 @router.get("/logout")
 async def logout():
     response = RedirectResponse(url="/frontend/login")

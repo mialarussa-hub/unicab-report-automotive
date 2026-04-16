@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, reports, data, sentiment, adv, scraping_test, sources
+from app.api import auth, reports, data, sentiment, adv, scraping_test, sources, timesheet
 from app.api import frontend
 
 app = FastAPI(
@@ -21,6 +21,7 @@ app.include_router(sentiment.router, prefix="/sentiment", tags=["sentiment"])
 app.include_router(adv.router, prefix="/adv", tags=["adv"])
 app.include_router(scraping_test.router, prefix="/scraping-test", tags=["scraping-test"])
 app.include_router(sources.router, prefix="/sources", tags=["sources"])
+app.include_router(timesheet.router, prefix="/timesheet", tags=["timesheet"])
 
 # Frontend routes (Jinja2 templates)
 app.include_router(frontend.router, prefix="/frontend", tags=["frontend"])

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Timesheet — UNICAB{% endblock %}
+
+{% block content %}
+<div class="timesheet-page">
+    <h1>Timesheet</h1>
+    <p class="subtitle">Rendicontazione attivita e ore di lavoro</p>
+
+    <!-- Controls -->
+    <div class="timesheet-controls">
+        <div class="month-selector">
+            <label for="month-picker">Mese:</label>
+            <input type="month" id="month-picker">
+        </div>
+        <div class="timesheet-actions">
+            <button class="btn-export" onclick="exportMonth()">Esporta Report</button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="summary-card">
+            <div class="summary-label">Ore Totali</div>
+            <div class="summary-value" id="total-hours">—</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Attivita</div>
+            <div class="summary-value" id="total-count">—</div>
+        </div>
+        <div class="summary-card summary-card-wide">
+            <div class="summary-label">Per Categoria</div>
+            <div id="category-breakdown"></div>
+        </div>
+    </div>
+
+    <!-- Add Activity Form -->
+    <div class="add-activity-form">
+        <h3>Aggiungi Attivita</h3>
+        <form id="activity-form">
+            <div class="form-row">
+                <div class="form-group" style="flex:0 0 150px">
+                    <label for="act-date">Data</label>
+                    <input type="date" id="act-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="act-desc">Descrizione</label>
+                    <input type="text" id="act-desc" maxlength="500" required placeholder="Cosa hai fatto...">
+                </div>
+                <div class="form-group" style="flex:0 0 100px">
+                    <label for="act-hours">Ore</label>
+                    <input type="number" id="act-hours" min="0.25" max="24" step="0.25" required placeholder="1.5">
+                </div>
+                <div class="form-group" style="flex:0 0 160px">
+                    <label for="act-category">Categoria</label>
+                    <select id="act-category" required>
+                        <option value="development">Sviluppo</option>
+                        <option value="research">Ricerca</option>
+                        <option value="meeting">Riunione</option>
+                        <option value="documentation">Documentazione</option>
+                        <option value="deployment">Deploy</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="act-notes">Note</label>
+                    <input type="text" id="act-notes" placeholder="Opzionale...">
+                </div>
+                <button type="submit" id="add-btn">Aggiungi</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Activity List -->
+    <div id="activities-list">
+        <div class="loading"><div class="spinner"></div> Caricamento...</div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal" style="display:none">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Modifica Attivita</h3>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <form id="edit-form">
+            <input type="hidden" id="edit-id">
+            <div class="form-group">
+                <label>Data</label>
+                <input type="date" id="edit-date" required>
+            </div>
+            <div class="form-group">
+                <label>Descrizione</label>
+                <input type="text" id="edit-desc" maxlength="500" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Ore</label>
+                    <input type="number" id="edit-hours" min="0.25" max="24" step="0.25" required>
+                </div>
+                <div class="form-group">
+                    <label>Categoria</label>
+                    <select id="edit-category" required>
+                        <option value="development">Sviluppo</option>
+                        <option value="research">Ricerca</option>
+                        <option value="meeting">Riunione</option>
+                        <option value="documentation">Documentazione</option>
+                        <option value="deployment">Deploy</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Note</label>
+                <input type="text" id="edit-notes">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="closeEditModal()">Annulla</button>
+                <button type="submit" class="btn-save">Salva</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/frontend/static/js/timesheet.js"></script>
+{% endblock %}
