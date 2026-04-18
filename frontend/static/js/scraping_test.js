@@ -6,6 +6,7 @@ const TYPE_ICONS = {
     youtube: '\u25B6\uFE0F',
     social: '\uD83D\uDC65',
     official: '\uD83C\uDFE2',
+    perplexity: '\uD83E\uDDE0',
 };
 
 const STATUS_LABELS = {
@@ -310,7 +311,7 @@ const LEVELS = [
         label: 'L2 — Media e Giornalisti',
         icon: '\uD83D\uDCF0',
         description: 'Articoli, test e recensioni da fonti specializzate',
-        types: ['news'],
+        types: ['news', 'perplexity'],
     },
     {
         key: 'L3',
