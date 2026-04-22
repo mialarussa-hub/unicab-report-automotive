@@ -1213,13 +1213,58 @@ async def _scrape_official_perplexity(
     return items
 
 
+def _model_url_variants(model: str, registry_variants: list[str]) -> list[str]:
+    """Generate URL-friendly permutations of a model name for substring matching.
+
+    Example: "DR 3.0" → {"dr 3.0", "dr-3.0", "dr3.0", "dr 30", "dr-30", "dr30",
+                        "dr 3-0", "dr-3-0", "dr3-0"}.
+    Covers common URL slug conventions: dots→hyphens, spaces→hyphens/stripped.
+    """
+    seen: set[str] = set()
+    def _add(s: str) -> None:
+        s = s.strip().lower()
+        if s and s not in seen:
+            seen.add(s)
+
+    bases = [model] + list(registry_variants)
+    for raw in bases:
+        if not raw:
+            continue
+        r = raw.strip().lower()
+        _add(r)
+        _add(r.replace(" ", "-"))
+        _add(r.replace(" ", ""))
+        _add(r.replace(".", "-"))
+        _add(r.replace(".", ""))
+        _add(r.replace(".", "-").replace(" ", "-"))
+        _add(r.replace(".", "").replace(" ", "-"))
+        _add(r.replace(".", "").replace(" ", ""))
+    return list(seen)
+
+
+JUNK_URL_SEGMENTS = (
+    "/thank-you", "/thankyou", "/grazie", "/success",
+    "/login", "/signin", "/sign-in", "/register", "/registrati",
+    "/cookie", "/privacy", "/disclaimer", "/cond-gen",
+    "/newsletter", "/rss", "/sitemap", "/404", "/error",
+    "/appointment-confirm", "/booking-confirm", "/confirm",
+    "/account", "/profile", "/my-area",
+)
+
+
+def _is_junk_url(url: str) -> bool:
+    """Filter out obvious non-content pages (thank-you, login, cookie policies, etc.)."""
+    u = (url or "").lower()
+    return any(seg in u for seg in JUNK_URL_SEGMENTS)
+
+
 async def _scrape_official_website(
     brand: str, model: str, website_url: str, source_name: str
 ) -> tuple[list[dict], int]:
     """Scrape manufacturer's official website for model-specific pages.
 
-    Strategy: map() to discover URLs → filter by model relevance → scrape top pages.
-    Fallback: search() if map() finds nothing.
+    Strategy: map() to discover URLs → filter by model URL variants → scrape top pages.
+    Augment with search() if map yields few results (common for small brands).
 
     Returns (items, credits_used).
     """
@@ -1230,9 +1275,8 @@ async def _scrape_official_website(
         return [], 0
 
     model_context = build_model_context(brand, model)
-    model_lower = model.lower()
-    # Include model variants for matching
-    variant_terms = [model_lower] + [v.lower() for v in model_context.get("model_variants", [])]
+    # Generate URL-friendly variants to catch /dr-3-0, /dr30, /dr3.0, etc.
+    variant_terms = _model_url_variants(model, model_context.get("model_variants", []))
 
     total_credits = 0
     items = []
@@ -1243,35 +1287,47 @@ async def _scrape_official_website(
     total_credits += map_resp.credits_used
 
     relevant_urls = []
+    seen_urls: set[str] = set()
     if not map_resp.error and map_resp.urls:
         for u in map_resp.urls:
             url = u.get("url", "")
+            if not url or url in seen_urls or _is_junk_url(url):
+                continue
             title = u.get("title", "")
             desc = u.get("description", "")
             combined = f"{url} {title} {desc}".lower()
 
-            # Check if any model term appears in the URL/title/description
+            # Require a model variant match in the combined text
             if any(term in combined for term in variant_terms):
                 relevant_urls.append(u)
+                seen_urls.add(url)
 
-    # Fallback: if map() found nothing, try search()
-    if not relevant_urls:
+    # Augment with search() when map yields < 3 relevant URLs (small/JS-heavy brands)
+    if len(relevant_urls) < 3:
         domain = website_url.replace("https://", "").replace("http://", "").rstrip("/")
-        fallback_query = f"site:{domain} {brand} {model}"
-        logger.warning(f"[{source_name}] MAP found 0 relevant URLs, FALLBACK SEARCH: '{fallback_query}'")
-        search_resp = client.search(fallback_query, limit=5, recent_only=False)
+        search_query = f"site:{domain} {brand} {model}"
+        logger.warning(
+            f"[{source_name}] Only {len(relevant_urls)} from MAP, AUGMENT SEARCH: '{search_query}'"
+        )
+        search_resp = client.search(search_query, limit=10, recent_only=False)
         total_credits += search_resp.credits_used
         if not search_resp.error:
             for r in search_resp.results:
+                if not r.url or r.url in seen_urls or _is_junk_url(r.url):
+                    continue
                 relevant_urls.append({
                     "url": r.url, "title": r.title, "description": r.content[:200],
                 })
+                seen_urls.add(r.url)
 
     if not relevant_urls:
         logger.warning(f"[{source_name}] No relevant official pages found for {brand} {model}")
         return [], total_credits
 
-    logger.warning(f"[{source_name}] Found {len(relevant_urls)} relevant official pages")
+    logger.warning(
+        f"[{source_name}] Found {len(relevant_urls)} relevant official pages "
+        f"(variants={variant_terms[:6]}...)"
+    )
 
     # Step 2: scrape the PRIMARY page first so we can discover trim slugs from its content.
     MAX_PAGES = 15
