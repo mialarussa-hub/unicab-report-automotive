@@ -35,10 +35,23 @@ header .logo {
     font-size: 1.2rem;
 }
 
+header .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
 header .nav-links a {
     color: white;
     text-decoration: none;
-    margin-left: 1.5rem;
+}
+
+header .nav-links span {
+    margin-left: 1rem;
+    padding-left: 1.25rem;
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.92rem;
 }
 
 main {
