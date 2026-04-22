@@ -647,6 +647,250 @@ function createResultItem(item, sourceType) {
     return el;
 }
 
+function renderAggregateOfficial(info) {
+    const fmtEUR = (v) => v == null ? null : formatCurrency(v);
+    let html = '<div class="official-info aggregate">';
+
+    // Top banner — marketing positioning
+    html += `<div class="agg-top">
+        <span class="agg-badge">Scheda consolidata ufficiale</span>
+        ${info.tono_comunicazione ? `<span class="agg-tono">${escapeHtml(info.tono_comunicazione)}</span>` : ''}
+    </div>`;
+
+    if (info.posizionamento_marketing) {
+        html += `<div class="agg-positioning">${escapeHtml(info.posizionamento_marketing)}</div>`;
+    }
+    if (info.claim_principale) {
+        html += `<div class="official-claim">&laquo;${escapeHtml(info.claim_principale)}&raquo;</div>`;
+    }
+
+    // Fascia prezzo + target (summary row)
+    const fp = info.prezzi_finanziamenti?.fascia_prezzo || {};
+    const summaryRow = [];
+    if (fp.min_eur != null || fp.max_eur != null) {
+        let priceText;
+        if (fp.min_eur != null && fp.max_eur != null) priceText = `${fmtEUR(fp.min_eur)} – ${fmtEUR(fp.max_eur)}`;
+        else if (fp.min_eur != null) priceText = `Da ${fmtEUR(fp.min_eur)}`;
+        else priceText = `Fino a ${fmtEUR(fp.max_eur)}`;
+        if (fp.note) priceText += ` (${escapeHtml(fp.note)})`;
+        summaryRow.push(`<span class="agg-chip chip-price">${priceText}</span>`);
+    }
+    if (info.target_comunicato) {
+        summaryRow.push(`<span class="agg-chip">Target: ${escapeHtml(info.target_comunicato)}</span>`);
+    }
+    if (summaryRow.length) html += `<div class="agg-chips">${summaryRow.join('')}</div>`;
+
+    // Allestimenti
+    const allestimenti = info.allestimenti || [];
+    if (allestimenti.length) {
+        html += `<div class="agg-section"><h4>Allestimenti (${allestimenti.length})</h4><table class="official-tech-table"><thead><tr>
+            <th>Nome</th><th>Posizionamento</th><th>Prezzo</th><th>Disponibile su</th><th>Note</th>
+        </tr></thead><tbody>`;
+        for (const a of allestimenti) {
+            html += `<tr>
+                <td><strong>${escapeHtml(a.nome || '—')}</strong></td>
+                <td>${escapeHtml(a.posizionamento || '—')}</td>
+                <td>${a.prezzo_eur != null ? fmtEUR(a.prezzo_eur) : '—'}</td>
+                <td>${(a.disponibile_su || []).map(s => `<span class="topic-tag">${escapeHtml(s)}</span>`).join(' ') || '—'}</td>
+                <td class="cell-note">${escapeHtml(a.prezzo_note || '')}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Motorizzazioni
+    const motori = info.motorizzazioni || [];
+    if (motori.length) {
+        html += `<div class="agg-section"><h4>Motorizzazioni (${motori.length})</h4><table class="official-tech-table"><thead><tr>
+            <th>Nome</th><th>Alim.</th><th>cc</th><th>L</th><th>CV</th><th>kW</th><th>Nm</th><th>Cil.</th><th>Cambio</th><th>Trazione</th>
+        </tr></thead><tbody>`;
+        for (const m of motori) {
+            const t = m.trasmissione || {};
+            const cambio = [t.tipo, t.marce ? `${t.marce} marce` : null].filter(Boolean).join(' · ');
+            html += `<tr>
+                <td><strong>${escapeHtml(m.nome_commerciale || '—')}</strong></td>
+                <td>${escapeHtml(ALIMENTAZIONE_LABEL[m.alimentazione] || m.alimentazione || '—')}</td>
+                <td>${m.cilindrata_cc ?? '—'}</td>
+                <td>${m.cilindrata_l ?? '—'}</td>
+                <td>${m.cv ?? '—'}</td>
+                <td>${m.kw ?? '—'}</td>
+                <td>${m.coppia_nm ?? '—'}</td>
+                <td>${m.cilindri ?? '—'}</td>
+                <td>${escapeHtml(cambio || '—')}</td>
+                <td>${escapeHtml(t.trazione || '—')}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Consumi ed emissioni
+    const consumi = info.consumi_emissioni || [];
+    if (consumi.length) {
+        html += `<div class="agg-section"><h4>Consumi ed emissioni</h4><table class="official-tech-table"><thead><tr>
+            <th>Motorizzazione</th><th>WLTP L/100km</th><th>WLTP kWh/100km</th><th>CO2 g/km</th><th>Classe</th><th>Autonomia EV km</th><th>Autonomia tot. km</th>
+        </tr></thead><tbody>`;
+        for (const c of consumi) {
+            html += `<tr>
+                <td>${escapeHtml(c.motorizzazione || '—')}</td>
+                <td>${c.wltp_combinato_l_100km ?? '—'}</td>
+                <td>${c.wltp_combinato_kwh_100km ?? '—'}</td>
+                <td>${c.emissioni_co2_gkm ?? '—'}</td>
+                <td>${escapeHtml(c.classe_emissioni || '—')}</td>
+                <td>${c.autonomia_elettrica_km ?? '—'}</td>
+                <td>${c.autonomia_totale_km ?? '—'}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Promozioni finanziarie
+    const promo = info.prezzi_finanziamenti?.promozioni || [];
+    if (promo.length) {
+        html += `<div class="agg-section"><h4>Finanziamenti e promozioni (${promo.length})</h4><table class="official-tech-table"><thead><tr>
+            <th>Tipo</th><th>Descrizione</th><th>Anticipo</th><th>Rata</th><th>Durata</th><th>TAN</th><th>TAEG</th><th>Scadenza</th>
+        </tr></thead><tbody>`;
+        for (const p of promo) {
+            html += `<tr>
+                <td>${escapeHtml(p.tipo || '—')}</td>
+                <td>${escapeHtml(p.descrizione || '—')}</td>
+                <td>${p.anticipo_eur != null ? fmtEUR(p.anticipo_eur) : '—'}</td>
+                <td>${p.rata_mensile_eur != null ? fmtEUR(p.rata_mensile_eur) + '/m' : '—'}</td>
+                <td>${p.durata_mesi != null ? p.durata_mesi + ' mesi' : '—'}</td>
+                <td>${p.tan_percent != null ? p.tan_percent + '%' : '—'}</td>
+                <td>${p.taeg_percent != null ? p.taeg_percent + '%' : '—'}</td>
+                <td>${escapeHtml(p.scadenza || '—')}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Dimensioni
+    const d = info.dimensioni || {};
+    const hasD = Object.values(d).some(v => v != null && v !== '');
+    if (hasD) {
+        const cell = (label, val, unit) => val != null
+            ? `<div class="dim-cell"><span class="dim-label">${label}</span><span class="dim-value">${val} ${unit}</span></div>`
+            : '';
+        html += `<div class="agg-section"><h4>Dimensioni e pesi</h4><div class="official-dims">
+            ${cell('Lunghezza', d.lunghezza_mm, 'mm')}
+            ${cell('Larghezza', d.larghezza_mm, 'mm')}
+            ${cell('Altezza', d.altezza_mm, 'mm')}
+            ${cell('Passo', d.passo_mm, 'mm')}
+            ${cell('Peso', d.peso_kg, 'kg')}
+            ${cell('Serbatoio', d.serbatoio_l, 'L')}
+            ${cell('Bagagliaio min', d.bagagliaio_min_l, 'L')}
+            ${cell('Bagagliaio max', d.bagagliaio_max_l, 'L')}
+        </div></div>`;
+    }
+
+    // Sicurezza ADAS
+    const adas = info.sicurezza_adas || {};
+    const adasSerie = adas.di_serie || [];
+    const adasOpt = adas.opzionali || [];
+    if (adasSerie.length || adasOpt.length || adas.note) {
+        html += `<div class="agg-section"><h4>Sicurezza &amp; ADAS</h4>`;
+        if (adasSerie.length) {
+            html += `<div class="adas-row"><strong>Di serie:</strong> ${adasSerie.map(x => `<span class="topic-tag adas-serie">${escapeHtml(x)}</span>`).join(' ')}</div>`;
+        }
+        if (adasOpt.length) {
+            html += `<div class="adas-row"><strong>Opzionali:</strong> ${adasOpt.map(x => `<span class="topic-tag adas-opt">${escapeHtml(x)}</span>`).join(' ')}</div>`;
+        }
+        if (adas.note) html += `<div class="adas-note">${escapeHtml(adas.note)}</div>`;
+        html += `</div>`;
+    }
+
+    // Colori disponibili
+    const colori = info.colori_disponibili || [];
+    if (colori.length) {
+        html += `<div class="agg-section"><h4>Colori disponibili (${colori.length})</h4><div class="colors-grid">`;
+        for (const c of colori) {
+            const priceTag = c.prezzo_eur === 0 ? '<span class="color-price free">incluso</span>'
+                : (c.prezzo_eur != null ? `<span class="color-price">${fmtEUR(c.prezzo_eur)}</span>` : '');
+            html += `<div class="color-cell">
+                <div class="color-name">${escapeHtml(c.nome || '—')}</div>
+                <div class="color-type">${escapeHtml(c.tipo || '')}</div>
+                ${priceTag}
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+
+    // Dotazione per allestimento
+    const dotMap = info.dotazione_per_allestimento || {};
+    const dotNames = Object.keys(dotMap);
+    if (dotNames.length) {
+        html += `<div class="agg-section"><h4>Dotazione di serie per allestimento</h4>`;
+        for (const name of dotNames) {
+            const list = dotMap[name] || [];
+            if (!list.length) continue;
+            html += `<details class="dotazione-trim"><summary><strong>${escapeHtml(name)}</strong> (${list.length})</summary><div class="dotazione-list">`;
+            for (const d of list) html += `<span class="dotazione-item">${escapeHtml(d)}</span>`;
+            html += `</div></details>`;
+        }
+        html += `</div>`;
+    }
+
+    // Optionals
+    const opts = info.optionals_disponibili || [];
+    if (opts.length) {
+        html += `<div class="agg-section"><h4>Optionals disponibili (${opts.length})</h4><table class="official-tech-table"><thead><tr>
+            <th>Nome</th><th>Categoria</th><th>Prezzo</th><th>Disponibile su</th><th>Descrizione</th>
+        </tr></thead><tbody>`;
+        for (const o of opts) {
+            html += `<tr>
+                <td><strong>${escapeHtml(o.nome || '—')}</strong></td>
+                <td>${escapeHtml(o.categoria || '—')}</td>
+                <td>${o.prezzo_eur != null ? fmtEUR(o.prezzo_eur) : '—'}</td>
+                <td>${(o.disponibile_su || []).map(s => `<span class="topic-tag">${escapeHtml(s)}</span>`).join(' ') || '—'}</td>
+                <td class="cell-note">${escapeHtml(o.descrizione || '')}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Materiali costruttivi
+    const mat = info.materiali_costruttivi || {};
+    const hasMat = ['carrozzeria', 'interni', 'sostenibilita'].some(k => (mat[k] || []).length);
+    if (hasMat) {
+        html += `<div class="agg-section"><h4>Materiali costruttivi</h4>`;
+        if ((mat.carrozzeria || []).length) html += `<div class="mat-row"><strong>Carrozzeria:</strong> ${mat.carrozzeria.map(x => `<span class="topic-tag">${escapeHtml(x)}</span>`).join(' ')}</div>`;
+        if ((mat.interni || []).length) html += `<div class="mat-row"><strong>Interni:</strong> ${mat.interni.map(x => `<span class="topic-tag">${escapeHtml(x)}</span>`).join(' ')}</div>`;
+        if ((mat.sostenibilita || []).length) html += `<div class="mat-row"><strong>Sostenibilità:</strong> ${mat.sostenibilita.map(x => `<span class="topic-tag">${escapeHtml(x)}</span>`).join(' ')}</div>`;
+        html += `</div>`;
+    }
+
+    // Peculiarità
+    const pec = info.peculiarita || [];
+    if (pec.length) {
+        html += `<div class="agg-section"><h4>Peculiarità</h4><ul class="pec-list">`;
+        for (const p of pec) html += `<li>${escapeHtml(p)}</li>`;
+        html += `</ul></div>`;
+    }
+
+    // Note divergenze tra fonti
+    if (info.note_discrepanze) {
+        html += `<div class="agg-section disc"><h4>Note / divergenze tra fonti</h4><div class="disc-note">${escapeHtml(info.note_discrepanze)}</div></div>`;
+    }
+
+    // Fonti citate
+    const fonti = info.fonti_citate || [];
+    if (fonti.length > 0) {
+        html += `<details class="official-citations">
+            <summary>Fonti citate (${fonti.length})</summary>
+            <ul>`;
+        for (const f of fonti) {
+            const label = f.title || f.url;
+            html += `<li><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
+            if (f.snippet) html += `<div class="citation-snippet">${escapeHtml(f.snippet)}</div>`;
+            html += `</li>`;
+        }
+        html += `</ul></details>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
 function renderAiComments(comments) {
     const SENTIMENT_ICONS = { positivo: '\uD83D\uDFE2', negativo: '\uD83D\uDD34', neutro: '\u26AA', misto: '\uD83D\uDFE1' };
 
@@ -676,6 +920,11 @@ function renderAiComments(comments) {
 }
 
 function renderOfficialInfo(info) {
+    // If this is the aggregate consolidated card, use the rich contract renderer
+    if (info.is_aggregate) {
+        return renderAggregateOfficial(info);
+    }
+
     let html = '<div class="official-info">';
 
     // Type + Positioning

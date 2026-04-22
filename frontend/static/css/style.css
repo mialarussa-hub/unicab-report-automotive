@@ -831,6 +831,125 @@ footer {
 }
 .citation-link:hover { text-decoration: underline; }
 
+/* Aggregated L1 contract card — featured rich rendering */
+.official-info.aggregate {
+    border-left-width: 6px;
+    background: linear-gradient(180deg, #f0f4ff 0%, #ffffff 160px);
+    padding: 1rem;
+}
+.agg-top {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.agg-badge {
+    background: #1a56db;
+    color: white;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.agg-tono {
+    background: #e8edff;
+    color: #1a56db;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+.agg-positioning {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 0.4rem;
+}
+.agg-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.5rem 0;
+}
+.agg-chip {
+    background: #e8edff;
+    color: #1a56db;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+.agg-chip.chip-price {
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 700;
+}
+.agg-section {
+    margin-top: 1rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed #cbd5e1;
+}
+.agg-section h4 {
+    font-size: 0.95rem;
+    color: #1a56db;
+    margin: 0 0 0.5rem 0;
+    font-weight: 700;
+}
+.cell-note { color: #666; font-size: 0.82rem; font-style: italic; }
+
+.adas-row { margin-bottom: 0.4rem; font-size: 0.88rem; }
+.topic-tag.adas-serie { background: #dcfce7; color: #166534; }
+.topic-tag.adas-opt { background: #fef3c7; color: #854d0e; }
+.adas-note { color: #666; font-size: 0.85rem; font-style: italic; margin-top: 0.3rem; }
+
+.colors-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.4rem;
+}
+.color-cell {
+    padding: 0.4rem 0.55rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.color-name { font-weight: 600; font-size: 0.88rem; color: #1e293b; }
+.color-type { color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.color-price {
+    align-self: flex-start;
+    background: #fef3c7;
+    color: #854d0e;
+    padding: 0.08rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.color-price.free { background: #dcfce7; color: #166534; }
+
+.dotazione-trim {
+    margin-bottom: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    background: #f8fafc;
+    border-radius: 4px;
+}
+.dotazione-trim summary { cursor: pointer; font-size: 0.9rem; color: #1e293b; }
+
+.mat-row { margin-bottom: 0.35rem; font-size: 0.88rem; }
+
+.pec-list {
+    margin: 0.3rem 0 0 1.2rem;
+    padding: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+.pec-list li { margin-bottom: 0.2rem; }
+
+.agg-section.disc { background: #fff7ed; border-left: 3px solid #f59e0b; padding: 0.5rem 0.8rem; border-radius: 4px; }
+.disc-note { color: #92400e; font-size: 0.88rem; font-style: italic; }
+
 .official-positioning { margin-bottom: 0.4rem; }
 .official-claim {
     font-style: italic;

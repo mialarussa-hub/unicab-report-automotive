@@ -1044,34 +1044,71 @@ async def _scrape_official_source(
     pplx_items = await _scrape_official_perplexity(brand, model, name, alimentazione, cilindrata)
     all_items.extend(pplx_items)
 
-    # D) AI analysis — information extraction (not sentiment)
-    # Exclude lightweight Perplexity citation items: no point extracting specs
-    # from a dealer-page snippet. They're just pointers for the user.
-    items_to_analyze = [it for it in all_items if not it.get("perplexity_citation")]
-    if items_to_analyze:
+    # D) AI analysis
+    # Per-item analysis on direct-scrape items only (useful for per-source navigation).
+    # Exclude Perplexity consolidated (handled by aggregate) and lightweight citations.
+    items_per_item = [
+        it for it in all_items
+        if not it.get("perplexity_citation") and not it.get("perplexity_consolidated")
+    ]
+    if items_per_item:
         from src.content_cleaner import analyze_official_content
-        analyzed = await analyze_official_content(items_to_analyze, brand, model)
+        analyzed = await analyze_official_content(items_per_item, brand, model)
         if analyzed:
             for i, info in enumerate(analyzed):
-                if i < len(items_to_analyze):
-                    item = items_to_analyze[i]
-                    if item.get("perplexity_consolidated"):
-                        info["fonte_consolidata"] = True
-                        info["fonti_citate"] = item.get("perplexity_citations", [])
-                    item["ai_official_info"] = info
+                if i < len(items_per_item):
+                    items_per_item[i]["ai_official_info"] = info
 
-    # Propagate consolidated item's motore_info to its citation siblings so the
-    # filter cascade shows them alongside the synthesis (they share the same
-    # alim/cil context by construction).
-    consolidated_info = next(
-        (it.get("ai_official_info") for it in all_items if it.get("perplexity_consolidated")),
-        None,
-    )
-    if consolidated_info and consolidated_info.get("motore_info"):
-        shared_motore = consolidated_info["motore_info"]
-        for it in all_items:
-            if it.get("perplexity_citation"):
-                it["motore_info"] = shared_motore
+    # Aggregate analysis — ONE rich consolidated JSON across ALL sources
+    # (direct scrapes + Perplexity answer). Produces the contract schema.
+    aggregate_items = [it for it in all_items if not it.get("perplexity_citation")]
+    aggregate = None
+    if aggregate_items:
+        from src.content_cleaner import aggregate_official_content
+        aggregate = await aggregate_official_content(
+            aggregate_items, brand, model, alimentazione, cilindrata,
+        )
+
+    # Attach aggregate to the consolidated Perplexity item (if present),
+    # otherwise synthesize one so the UI always has a featured card.
+    if aggregate:
+        target = next((it for it in all_items if it.get("perplexity_consolidated")), None)
+        if target is None:
+            target = {
+                "url": "aggregate://l1-consolidated",
+                "title": f"{brand} {model} — Scheda consolidata ufficiale",
+                "content": "",
+                "source_type": "official",
+                "scraped": True,
+                "perplexity_consolidated": True,
+                "perplexity_citations": [],
+            }
+            all_items.insert(0, target)
+
+        aggregate["fonte_consolidata"] = True
+        aggregate["fonti_citate"] = target.get("perplexity_citations", [])
+        target["ai_official_info"] = aggregate
+
+        # Build a unified motore_info from the aggregate's motorizzazioni list
+        motori = aggregate.get("motorizzazioni") or []
+        versioni = []
+        for m in motori:
+            if not isinstance(m, dict):
+                continue
+            a = m.get("alimentazione")
+            c = m.get("cilindrata_l")
+            if a or c is not None:
+                versioni.append({
+                    "alimentazione": a,
+                    "cilindrata": c,
+                    "descrizione": m.get("nome_commerciale"),
+                })
+        if versioni:
+            target["motore_info"] = {"versioni": versioni}
+            # Propagate to citation items so the filter cascade shows them
+            for it in all_items:
+                if it.get("perplexity_citation"):
+                    it["motore_info"] = target["motore_info"]
 
     return SourceResult(
         source=name, source_type="official", status="ok" if all_items else "partial",
