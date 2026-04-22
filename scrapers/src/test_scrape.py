@@ -1044,22 +1044,7 @@ async def _scrape_official_source(
     pplx_items = await _scrape_official_perplexity(brand, model, name, alimentazione, cilindrata)
     all_items.extend(pplx_items)
 
-    # D) AI analysis
-    # Per-item analysis on direct-scrape items only (useful for per-source navigation).
-    # Exclude Perplexity consolidated (handled by aggregate) and lightweight citations.
-    items_per_item = [
-        it for it in all_items
-        if not it.get("perplexity_citation") and not it.get("perplexity_consolidated")
-    ]
-    if items_per_item:
-        from src.content_cleaner import analyze_official_content
-        analyzed = await analyze_official_content(items_per_item, brand, model)
-        if analyzed:
-            for i, info in enumerate(analyzed):
-                if i < len(items_per_item):
-                    items_per_item[i]["ai_official_info"] = info
-
-    # Aggregate analysis — ONE rich consolidated JSON across ALL sources
+    # D) Aggregate analysis — ONE rich consolidated JSON across ALL sources
     # (direct scrapes + Perplexity answer). Produces the contract schema.
     aggregate_items = [it for it in all_items if not it.get("perplexity_citation")]
     aggregate = None
