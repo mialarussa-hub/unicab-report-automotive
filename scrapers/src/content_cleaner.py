@@ -182,10 +182,59 @@ Per ogni contenuto restituisci un oggetto JSON con questa struttura:
       }}
     ]
   }},
+  "prestazioni_per_versione": [
+    {{
+      "versione": "nome/allestimento",
+      "alimentazione": "{alim_enum}",
+      "cilindrata_cc": 1499,
+      "cv": 127,
+      "kw": 93,
+      "coppia_nm": 225,
+      "cilindri": 4,
+      "cambio": "manuale 6 rapporti | automatico 8 rapporti | DCT 7 rapporti | e-CVT | etc.",
+      "trazione": "anteriore|posteriore|integrale",
+      "posti": 5,
+      "zero_cento_s": 10.5,
+      "velocita_max_kmh": 190
+    }}
+  ],
+  "consumi_per_versione": [
+    {{
+      "versione": "nome/allestimento",
+      "wltp_combinato_l_100km": 7.2,
+      "wltp_combinato_kwh_100km": null,
+      "emissioni_co2_gkm": 174,
+      "classe_emissioni": "Euro 6D",
+      "autonomia_elettrica_km": null
+    }}
+  ],
+  "dimensioni": {{
+    "lunghezza_mm": 4325,
+    "larghezza_mm": 1815,
+    "altezza_mm": 1640,
+    "passo_mm": 2570,
+    "peso_kg": 1325,
+    "serbatoio_l": 46,
+    "bagagliaio_min_l": 375,
+    "bagagliaio_max_l": 1000
+  }},
+  "garanzia": {{
+    "anni": 5,
+    "km": 100000,
+    "note": "chilometraggio illimitato per i primi 2 anni"
+  }},
+  "dotazione_dettagliata": ["ABS", "ESP", "TPMS", "airbag", "cerchi lega 17", "infotainment touch 8\"", "telecamera posteriore", "..."],
   "target_comunicato": "pubblico target del messaggio (famiglie, giovani, professionisti, etc.)",
   "tono_comunicazione": "sportivo|premium|accessibile|tecnologico|ecologico|familiare|altro",
   "caratteristiche_evidenziate": ["feature tecniche/di design su cui il brand insiste"]
 }}
+
+REGOLE per i campi tecnici:
+- Riempi SOLO i campi per cui hai un dato ESPLICITO nel contenuto. NON inventare.
+- `prestazioni_per_versione` e `consumi_per_versione`: un oggetto per versione distinta citata.
+- `dimensioni`, `garanzia`: un solo oggetto (il modello base o la versione dominante).
+- Se un singolo valore manca usa null; se un intero oggetto manca usa null o oggetto vuoto.
+- `dotazione_dettagliata`: lista piatta di stringhe ESATTAMENTE come citate.
 
 REGOLE per motore_info.versioni:
 - Un oggetto per OGNI motorizzazione/versione menzionata nel contenuto.

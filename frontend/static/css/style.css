@@ -700,6 +700,102 @@ footer {
     margin-top: 0.15rem;
 }
 
+/* Technical data tables */
+.official-tech-block {
+    margin-top: 0.8rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #cbd5e1;
+}
+.official-tech-block strong { display: block; margin-bottom: 0.4rem; color: #1a56db; }
+.official-tech-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.official-tech-table th,
+.official-tech-table td {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #dbe3f0;
+    text-align: left;
+}
+.official-tech-table th {
+    background: #f0f4ff;
+    font-weight: 600;
+    color: #1a56db;
+}
+.official-tech-table tr:nth-child(even) td { background: #fafbff; }
+
+.official-dims {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.4rem;
+}
+.dim-cell {
+    background: #f0f4ff;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+}
+.dim-label { color: #666; font-size: 0.75rem; }
+.dim-value { font-weight: 600; color: #1a56db; }
+
+.official-warranty {
+    margin-top: 0.6rem;
+    padding: 0.4rem 0.6rem;
+    background: #e6f7e6;
+    border-radius: 4px;
+    color: #0a5c24;
+    font-size: 0.9rem;
+}
+
+.official-dotazione {
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+}
+.official-dotazione summary {
+    cursor: pointer;
+    color: #1a56db;
+    font-weight: 600;
+}
+.dotazione-list {
+    margin-top: 0.4rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+.dotazione-item {
+    background: #e8edff;
+    color: #1a56db;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+}
+
+.official-fulltext {
+    margin-top: 0.8rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #cbd5e1;
+}
+.official-fulltext summary {
+    cursor: pointer;
+    color: #6b21a8;
+    font-weight: 600;
+    font-size: 0.88rem;
+}
+.official-fulltext pre {
+    margin-top: 0.5rem;
+    padding: 0.7rem;
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font-size: 0.85rem;
+    color: #333;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
 .official-positioning { margin-bottom: 0.4rem; }
 .official-claim {
     font-style: italic;

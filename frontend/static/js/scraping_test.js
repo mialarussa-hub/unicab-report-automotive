@@ -602,6 +602,13 @@ function createResultItem(item, sourceType) {
     if (item.ai_official_info) {
         badges += `<span class="scrape-badge official">L1 Comunicazione ufficiale</span>`;
         contentHtml = renderOfficialInfo(item.ai_official_info);
+        // For consolidated (Perplexity) items, append the full synthesis text expander
+        if (item.ai_official_info.fonte_consolidata && item.content) {
+            contentHtml += `<details class="official-fulltext">
+                <summary>Testo sintesi completo</summary>
+                <pre>${escapeHtml(item.content)}</pre>
+            </details>`;
+        }
     }
     // 1. AI-extracted comments (priority display)
     else if (item.ai_comments && item.ai_comments.length > 0) {
@@ -736,6 +743,87 @@ function renderOfficialInfo(info) {
     }
     if (info.target_comunicato) {
         html += `<div class="official-target"><strong>Target:</strong> ${escapeHtml(info.target_comunicato)}</div>`;
+    }
+
+    // Technical data: prestazioni per versione
+    const prestazioni = info.prestazioni_per_versione || [];
+    if (prestazioni.length > 0) {
+        html += `<div class="official-tech-block"><strong>Prestazioni per versione:</strong><table class="official-tech-table"><thead><tr>
+            <th>Versione</th><th>Alim.</th><th>cc</th><th>CV</th><th>kW</th><th>Nm</th><th>Cambio</th><th>Trazione</th><th>0-100</th><th>V.max</th>
+            </tr></thead><tbody>`;
+        for (const p of prestazioni) {
+            html += `<tr>
+                <td>${escapeHtml(p.versione || '—')}</td>
+                <td>${escapeHtml(ALIMENTAZIONE_LABEL[p.alimentazione] || p.alimentazione || '—')}</td>
+                <td>${p.cilindrata_cc ?? '—'}</td>
+                <td>${p.cv ?? '—'}</td>
+                <td>${p.kw ?? '—'}</td>
+                <td>${p.coppia_nm ?? '—'}</td>
+                <td>${escapeHtml(p.cambio || '—')}</td>
+                <td>${escapeHtml(p.trazione || '—')}</td>
+                <td>${p.zero_cento_s != null ? p.zero_cento_s + ' s' : '—'}</td>
+                <td>${p.velocita_max_kmh != null ? p.velocita_max_kmh + ' km/h' : '—'}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Consumi
+    const consumi = info.consumi_per_versione || [];
+    if (consumi.length > 0) {
+        html += `<div class="official-tech-block"><strong>Consumi ed emissioni:</strong><table class="official-tech-table"><thead><tr>
+            <th>Versione</th><th>WLTP (L/100km)</th><th>WLTP (kWh/100km)</th><th>CO2 (g/km)</th><th>Classe</th><th>Autonomia EV (km)</th>
+            </tr></thead><tbody>`;
+        for (const c of consumi) {
+            html += `<tr>
+                <td>${escapeHtml(c.versione || '—')}</td>
+                <td>${c.wltp_combinato_l_100km ?? '—'}</td>
+                <td>${c.wltp_combinato_kwh_100km ?? '—'}</td>
+                <td>${c.emissioni_co2_gkm ?? '—'}</td>
+                <td>${escapeHtml(c.classe_emissioni || '—')}</td>
+                <td>${c.autonomia_elettrica_km ?? '—'}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    // Dimensioni
+    const dim = info.dimensioni || {};
+    const hasDim = Object.values(dim).some(v => v != null && v !== '');
+    if (hasDim) {
+        const fmt = (label, val, unit) => val != null ? `<div class="dim-cell"><span class="dim-label">${label}</span><span class="dim-value">${val} ${unit}</span></div>` : '';
+        html += `<div class="official-tech-block"><strong>Dimensioni e pesi:</strong><div class="official-dims">
+            ${fmt('Lunghezza', dim.lunghezza_mm, 'mm')}
+            ${fmt('Larghezza', dim.larghezza_mm, 'mm')}
+            ${fmt('Altezza', dim.altezza_mm, 'mm')}
+            ${fmt('Passo', dim.passo_mm, 'mm')}
+            ${fmt('Peso', dim.peso_kg, 'kg')}
+            ${fmt('Serbatoio', dim.serbatoio_l, 'L')}
+            ${fmt('Bagagliaio min', dim.bagagliaio_min_l, 'L')}
+            ${fmt('Bagagliaio max', dim.bagagliaio_max_l, 'L')}
+        </div></div>`;
+    }
+
+    // Garanzia
+    if (info.garanzia && (info.garanzia.anni || info.garanzia.km)) {
+        const g = info.garanzia;
+        let gText = '';
+        if (g.anni) gText += `${g.anni} anni`;
+        if (g.km) gText += (gText ? ' / ' : '') + `${g.km.toLocaleString('it-IT')} km`;
+        if (g.note) gText += ` (${g.note})`;
+        html += `<div class="official-warranty"><strong>Garanzia:</strong> ${escapeHtml(gText)}</div>`;
+    }
+
+    // Dotazione dettagliata
+    const dotazione = info.dotazione_dettagliata || [];
+    if (dotazione.length > 0) {
+        html += `<details class="official-dotazione">
+            <summary>Dotazione dettagliata (${dotazione.length})</summary>
+            <div class="dotazione-list">`;
+        for (const d of dotazione) {
+            html += `<span class="dotazione-item">${escapeHtml(d)}</span>`;
+        }
+        html += `</div></details>`;
     }
 
     // Citations list (from Perplexity consolidated items)
