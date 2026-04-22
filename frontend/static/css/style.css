@@ -1240,6 +1240,38 @@ body.show-non-matches .ai-comment.non-match {
     font-variant-numeric: tabular-nums;
 }
 
+.progress-actions {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+}
+
+.cancel-btn {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+    padding: 0.35rem 0.75rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.15s;
+}
+.cancel-btn:hover:not(:disabled) {
+    background: #fecaca;
+    border-color: #ef4444;
+}
+.cancel-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.cancel-banner {
+    background: #fff7ed;
+    color: #92400e;
+    border-left: 4px solid #f59e0b;
+    padding: 0.7rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
 .progress-sources {
     display: flex;
     flex-direction: column;

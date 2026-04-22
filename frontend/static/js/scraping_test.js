@@ -93,6 +93,7 @@ function buildMotoreFilterBanner(data) {
 let activePollInterval = null;
 let activeTimerInterval = null;
 let scrapeStartTime = null;
+let activeSessionId = null;
 
 // Load previous sessions on page load
 document.addEventListener('DOMContentLoaded', loadSessions);
@@ -136,6 +137,7 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
         if (data.status === 'running' && data.session_id) {
             // Async mode — show progress and start polling
             scrapeStartTime = Date.now();
+            activeSessionId = data.session_id;
             renderProgressCard(data.sources_names || [], brand, model, phase);
             startPolling(data.session_id);
         } else {
@@ -168,9 +170,15 @@ function startPolling(sessionId) {
             // Update progress card with completed sources
             updateProgressCard(data);
 
-            if (data.status === 'completed' || data.status === 'failed') {
+            if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
                 stopPolling();
-                renderResults(data, true);
+                activeSessionId = null;
+                if (data.status === 'cancelled') {
+                    document.getElementById('results').innerHTML =
+                        `<div class="cancel-banner">Sessione annullata.</div>`;
+                } else {
+                    renderResults(data, true);
+                }
                 loadSessions();
                 document.getElementById('submit-btn').disabled = false;
             }
@@ -218,7 +226,12 @@ function renderProgressCard(sourceNames, brand, model, phase = 'all') {
                     Scraping <strong>${escapeHtml(label)}</strong>
                     <span class="phase-badge ${phaseBadge.class}">${phaseBadge.label}</span>
                 </div>
-                <div class="progress-timer" id="progress-timer">0:00</div>
+                <div class="progress-actions">
+                    <div class="progress-timer" id="progress-timer">0:00</div>
+                    <button type="button" id="cancel-scrape-btn" class="cancel-btn" title="Annulla scraping">
+                        \u2715 Annulla
+                    </button>
+                </div>
             </div>
             <div class="progress-sources" id="progress-sources">
                 ${sourceNames.map(name => `
@@ -231,6 +244,37 @@ function renderProgressCard(sourceNames, brand, model, phase = 'all') {
             </div>
         </div>
     `;
+
+    const cancelBtn = document.getElementById('cancel-scrape-btn');
+    if (cancelBtn) cancelBtn.addEventListener('click', cancelActiveScrape);
+}
+
+async function cancelActiveScrape() {
+    if (!activeSessionId) return;
+    const btn = document.getElementById('cancel-scrape-btn');
+    if (!confirm('Annullare lo scraping in corso?\n\nLe chiamate gi\u00e0 partite non possono essere interrotte ma i risultati non verranno salvati.')) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Annullamento...'; }
+
+    try {
+        const resp = await fetch(`/api/scraping-test/sessions/${activeSessionId}/cancel`, {
+            method: 'POST',
+            credentials: 'same-origin',
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    } catch (err) {
+        console.error('Cancel error:', err);
+        if (btn) { btn.disabled = false; btn.textContent = '\u2715 Annulla'; }
+        alert('Errore durante l\'annullamento: ' + err.message);
+        return;
+    }
+
+    stopPolling();
+    const cancelledId = activeSessionId;
+    activeSessionId = null;
+    document.getElementById('results').innerHTML =
+        `<div class="cancel-banner">Sessione annullata. I risultati delle chiamate gi\u00e0 in volo non verranno salvati.</div>`;
+    document.getElementById('submit-btn').disabled = false;
+    loadSessions();
 }
 
 function updateProgressCard(data) {
@@ -324,7 +368,8 @@ async function loadSessions() {
 
             const statusIcon = s.status === 'completed' ? '\u2705' :
                                s.status === 'running' ? '\uD83D\uDD04' :
-                               s.status === 'failed' ? '\u274C' : '\u26AA';
+                               s.status === 'failed' ? '\u274C' :
+                               s.status === 'cancelled' ? '\uD83D\uDEAB' : '\u26AA';
 
             const el = document.createElement('div');
             el.className = 'session-item';

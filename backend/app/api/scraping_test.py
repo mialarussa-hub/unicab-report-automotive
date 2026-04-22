@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 SCRAPERS_URL = "http://scrapers:8001"
 
+# Registry of running scrape tasks, keyed by session_id. Populated in /run,
+# cleaned up on task completion or cancellation.
+_active_tasks: dict[str, asyncio.Task] = {}
+
 
 class ScrapeTestRequest(BaseModel):
     brand: str
@@ -256,12 +260,15 @@ async def run_scraping_test(
     await db.refresh(session)
 
     # Launch scraping in background — returns immediately
-    asyncio.create_task(
+    session_id_str = str(session.id)
+    task = asyncio.create_task(
         _run_scraping_background(
-            str(session.id), request.brand, request.model, sources_list,
+            session_id_str, request.brand, request.model, sources_list,
             alim, float(cil) if cil is not None else None,
         )
     )
+    _active_tasks[session_id_str] = task
+    task.add_done_callback(lambda _: _active_tasks.pop(session_id_str, None))
 
     return {
         "session_id": str(session.id),
@@ -373,6 +380,10 @@ async def _run_scraping_background(
             await db.commit()
             logger.info(f"Session {session_id} completed: {total_results} results")
 
+    except asyncio.CancelledError:
+        logger.warning(f"Session {session_id} scraping task cancelled")
+        # Status already set to 'cancelled' by the /cancel endpoint; nothing else to do
+        raise
     except Exception as e:
         logger.error(f"Background scraping error for session {session_id}: {e}")
         try:
@@ -381,12 +392,53 @@ async def _run_scraping_background(
                     select(ScrapingSession).where(ScrapingSession.id == uuid.UUID(session_id))
                 )
                 session = result.scalar_one_or_none()
-                if session:
+                # Don't overwrite 'cancelled' status
+                if session and session.status == "running":
                     session.status = "failed"
                     session.completed_at = datetime.now(timezone.utc)
                     await db.commit()
         except Exception:
             pass
+
+
+@router.post("/sessions/{session_id}/cancel")
+async def cancel_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_user_from_cookie),
+):
+    """Cancel a running scrape: mark session 'cancelled' + cancel the async task.
+
+    Any in-flight external API calls (Firecrawl, Perplexity, Claude) already
+    dispatched before cancel will complete server-side, but their results will
+    NOT be persisted: the source-complete callback checks session status and
+    skips saves for non-running sessions.
+    """
+    result = await db.execute(
+        select(ScrapingSession).where(
+            ScrapingSession.id == uuid.UUID(session_id),
+            ScrapingSession.created_by == current_user.id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.status != "running":
+        return {"ok": True, "already_terminal": True, "status": session.status}
+
+    # Mark cancelled in DB first (so the callback-skip logic takes effect immediately)
+    session.status = "cancelled"
+    session.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    # Cancel the asyncio task in-flight (if any)
+    task = _active_tasks.pop(session_id, None)
+    if task and not task.done():
+        task.cancel()
+
+    logger.warning(f"Session {session_id} cancelled by user {current_user.email}")
+    return {"ok": True, "cancelled": True}
 
 
 @router.post("/source-complete")
@@ -409,6 +461,12 @@ async def source_complete(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Skip save if session was cancelled or already terminated — avoids writing
+    # results into a session the user explicitly stopped.
+    if session.status != "running":
+        logger.info(f"Skipping callback for session {session_id}: status={session.status}")
+        return {"ok": True, "skipped": True, "reason": f"session status: {session.status}"}
 
     source_name = source_data.get("source", "")
     source_type = source_data.get("source_type", "")
