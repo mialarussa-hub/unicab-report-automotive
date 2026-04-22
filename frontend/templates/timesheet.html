@@ -33,7 +33,8 @@
         </div>
     </div>
 
-    <!-- Add Activity Form -->
+    {% if user.is_admin %}
+    <!-- Add Activity Form (admin only) -->
     <div class="add-activity-form">
         <h3>Aggiungi Attivita</h3>
         <form id="activity-form">
@@ -44,7 +45,7 @@
                 </div>
                 <div class="form-group">
                     <label for="act-desc">Descrizione</label>
-                    <input type="text" id="act-desc" maxlength="500" required placeholder="Cosa hai fatto...">
+                    <input type="text" id="act-desc" maxlength="2000" required placeholder="Cosa hai fatto...">
                 </div>
                 <div class="form-group" style="flex:0 0 100px">
                     <label for="act-hours">Ore</label>
@@ -68,14 +69,16 @@
             </div>
         </form>
     </div>
+    {% endif %}
 
     <!-- Activity List -->
-    <div id="activities-list">
+    <div id="activities-list" data-admin="{{ 'true' if user.is_admin else 'false' }}">
         <div class="loading"><div class="spinner"></div> Caricamento...</div>
     </div>
 </div>
 
-<!-- Edit Modal -->
+{% if user.is_admin %}
+<!-- Edit Modal (admin only) -->
 <div class="modal-overlay" id="edit-modal" style="display:none">
     <div class="modal-content">
         <div class="modal-header">
@@ -90,7 +93,7 @@
             </div>
             <div class="form-group">
                 <label>Descrizione</label>
-                <input type="text" id="edit-desc" maxlength="500" required>
+                <textarea id="edit-desc" maxlength="2000" rows="4" required></textarea>
             </div>
             <div class="form-row">
                 <div class="form-group">
@@ -119,6 +122,7 @@
         </form>
     </div>
 </div>
+{% endif %}
 
 <script src="/frontend/static/js/timesheet.js"></script>
 {% endblock %}

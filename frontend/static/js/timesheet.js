@@ -8,6 +8,13 @@ const CATEGORIES = {
     deployment: { label: 'Deploy', color: '#e94560' },
 };
 
+// Admin flag driven by server-rendered data-admin attribute on #activities-list.
+// Non-admin users (read-only client view) never see add form, edit/delete buttons.
+const IS_ADMIN = (() => {
+    const el = document.getElementById('activities-list');
+    return el && el.dataset.admin === 'true';
+})();
+
 function getCurrentMonth() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -26,15 +33,19 @@ document.addEventListener('DOMContentLoaded', () => {
         loadSummary();
     });
 
-    // Set default date to today for the add form
-    document.getElementById('act-date').valueAsDate = new Date();
+    // Set default date for add form (admin only — form is not rendered for client users)
+    if (IS_ADMIN) {
+        const dateEl = document.getElementById('act-date');
+        if (dateEl) dateEl.valueAsDate = new Date();
+    }
 
     loadActivities();
     loadSummary();
 });
 
-// Add activity form
-document.getElementById('activity-form').addEventListener('submit', async (e) => {
+// Add activity form — only bound for admin (element absent for clients)
+const activityForm = document.getElementById('activity-form');
+if (activityForm) activityForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('add-btn');
     btn.disabled = true;
@@ -72,8 +83,9 @@ document.getElementById('activity-form').addEventListener('submit', async (e) =>
     }
 });
 
-// Edit form
-document.getElementById('edit-form').addEventListener('submit', async (e) => {
+// Edit form — only bound for admin (modal not rendered for clients)
+const editForm = document.getElementById('edit-form');
+if (editForm) editForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = document.getElementById('edit-id').value;
 
@@ -188,10 +200,12 @@ function createActivityCard(act) {
         </div>
         <div class="activity-right">
             <span class="activity-hours">${act.hours}h</span>
+            ${IS_ADMIN ? `
             <div class="activity-actions">
                 <button class="btn-edit" onclick='openEditModal(${JSON.stringify(act)})'>Modifica</button>
                 <button class="btn-delete" onclick="deleteActivity('${act.id}')">✕</button>
             </div>
+            ` : ''}
         </div>
     `;
     return card;

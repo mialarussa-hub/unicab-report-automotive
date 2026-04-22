@@ -8,7 +8,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import select, extract, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.scraping_test import get_admin_from_cookie
+from app.api.scraping_test import get_admin_from_cookie, get_user_from_cookie
 from app.database import get_db
 from app.models.activity import Activity
 from app.models.user import User
@@ -38,11 +38,24 @@ def _parse_month(month: str | None) -> tuple[int, int] | None:
         return None
 
 
+def _scope_filter(user: User):
+    """Return a SQLAlchemy filter that scopes activity queries:
+    - admin users see only their own activities (current behavior)
+    - non-admin (client) users see ALL admin activities — the timesheet is a
+      transparency view of time billed to them, not a personal journal.
+    """
+    if user.is_admin:
+        return Activity.created_by == user.id
+    # Return an always-true expression for non-admin so it's safe to pass to .where()
+    from sqlalchemy import literal
+    return literal(True)
+
+
 @router.get("/summary", response_model=MonthlySummary)
 async def monthly_summary(
     month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_from_cookie),
+    current_user: User = Depends(get_user_from_cookie),
 ):
     parsed = _parse_month(month)
     if not parsed:
@@ -50,7 +63,7 @@ async def monthly_summary(
     year, mo = parsed
 
     base_filter = [
-        Activity.created_by == current_user.id,
+        _scope_filter(current_user),
         extract("year", Activity.activity_date) == year,
         extract("month", Activity.activity_date) == mo,
     ]
@@ -82,7 +95,7 @@ async def monthly_summary(
 async def export_month(
     month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_from_cookie),
+    current_user: User = Depends(get_user_from_cookie),
 ):
     parsed = _parse_month(month)
     if not parsed:
@@ -92,7 +105,7 @@ async def export_month(
     result = await db.execute(
         select(Activity)
         .where(
-            Activity.created_by == current_user.id,
+            _scope_filter(current_user),
             extract("year", Activity.activity_date) == year,
             extract("month", Activity.activity_date) == mo,
         )
@@ -100,11 +113,20 @@ async def export_month(
     )
     activities = result.scalars().all()
 
+    # Resolve operator name: admin sees own, non-admin sees the activity creator's name
+    operator_name = current_user.full_name
+    if not current_user.is_admin and activities:
+        owner_id = activities[0].created_by
+        owner_result = await db.execute(select(User).where(User.id == owner_id))
+        owner = owner_result.scalar_one_or_none()
+        if owner:
+            operator_name = owner.full_name
+
     # Build text report
     lines = [
         f"REPORT ATTIVITA - {month}",
         f"{'=' * 40}",
-        f"Operatore: {current_user.full_name}",
+        f"Operatore: {operator_name}",
         "",
     ]
 
@@ -137,9 +159,9 @@ async def export_month(
 async def list_activities(
     month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_from_cookie),
+    current_user: User = Depends(get_user_from_cookie),
 ):
-    stmt = select(Activity).where(Activity.created_by == current_user.id)
+    stmt = select(Activity).where(_scope_filter(current_user))
 
     parsed = _parse_month(month)
     if parsed:
