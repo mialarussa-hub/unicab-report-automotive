@@ -392,8 +392,9 @@ async function exportMonth() {
     }
 }
 
-// Close modal on overlay click
-document.getElementById('edit-modal').addEventListener('click', (e) => {
+// Close modal on overlay click (admin only — modal not rendered for client users)
+const editModal = document.getElementById('edit-modal');
+if (editModal) editModal.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeEditModal();
 });
 
