@@ -702,11 +702,18 @@ async def _generate_summaries_batch(source_results: list) -> None:
         if len(items_text) > 40000:
             items_text = items_text[:40000]
 
+        from src.motore import prompt_enum_description
+        alim_enum = prompt_enum_description()
         prompt = f"""Riassumi ogni articolo/thread/video qui sotto in 2-3 frasi in italiano.
 Concentrati su: argomento principale, opinione dominante, punti chiave.
 
+Inoltre estrai le motorizzazioni principali oggetto dell'articolo/thread/video.
+`alimentazione` DEVE essere uno di: {alim_enum}.
+`cilindrata` è un numero decimale in litri (es. 1.0, 1.5, 2.0); usa null se elettrico puro o non indicata.
+Se l'articolo non cita motorizzazioni specifiche, "motore_info": {{"versioni": []}}.
+
 Restituisci un JSON array con UN oggetto per OGNI articolo, nello stesso ordine:
-[{{"summary": "riassunto 2-3 frasi"}}]
+[{{"summary": "riassunto 2-3 frasi", "motore_info": {{"versioni": [{{"alimentazione": "benzina", "cilindrata": 1.0, "descrizione": "1.0 TSI"}}]}}}}]
 
 SOLO il JSON array, nient'altro.
 
@@ -743,9 +750,26 @@ SOLO il JSON array, nient'altro.
                     text = "\n".join(lines[1:-1])
 
                 summaries = json.loads(text)
+                from src.motore import normalize_alimentazione, normalize_cilindrata
                 for idx, (i, item) in enumerate(items_to_summarize):
                     if idx < len(summaries):
                         item["summary"] = summaries[idx].get("summary", "")
+                        mi = summaries[idx].get("motore_info") or {}
+                        versioni = mi.get("versioni") or []
+                        clean = []
+                        for v in versioni:
+                            if not isinstance(v, dict):
+                                continue
+                            a = normalize_alimentazione(v.get("alimentazione"))
+                            c = normalize_cilindrata(v.get("cilindrata"))
+                            if not a and c is None:
+                                continue
+                            clean.append({
+                                "alimentazione": a,
+                                "cilindrata": c,
+                                "descrizione": v.get("descrizione") or None,
+                            })
+                        item["motore_info"] = {"versioni": clean}
 
                 logger.warning(f"[{source.source}] Generated {len(summaries)} summaries")
 
@@ -768,13 +792,18 @@ async def _run_batch_sentiment(comments: list[dict], source_name: str,
     if len(comments_text) > 30000:
         comments_text = comments_text[:30000]
 
+    from src.motore import prompt_enum_description
+    alim_enum = prompt_enum_description()
     prompt = f"""Analizza questi commenti {source_label} di utenti italiani su auto.
-Per OGNI commento restituisci sentiment e topics.
+Per OGNI commento restituisci sentiment, topics e (se menzionata) la motorizzazione.
 
 Topics possibili: prezzo, motore, design, affidabilità, consumi, cambio, comfort, qualità, spazio, tecnologia, assistenza, valore, guida, rumorosità, sicurezza, batteria, autonomia, ricarica
 
+`motore_menzionato` deve essere null se il commento NON cita alcuna motorizzazione/alimentazione.
+Se lo cita: {{"alimentazione": "{alim_enum}", "cilindrata": 1.0}} (cilindrata decimale in litri, null se elettrico puro o non citata).
+
 Restituisci un JSON array con UN oggetto per OGNI commento, nello stesso ordine:
-[{{"sentiment": "positivo|negativo|neutro|misto", "topics": ["topic1"]}}]
+[{{"sentiment": "positivo|negativo|neutro|misto", "topics": ["topic1"], "motore_menzionato": null}}]
 
 SOLO il JSON array.
 
@@ -812,10 +841,21 @@ Commenti:
                 text = "\n".join(lines[1:-1])
 
             sentiments = json.loads(text)
+            from src.motore import normalize_alimentazione, normalize_cilindrata
             for i, c in enumerate(comments):
                 if i < len(sentiments):
                     c["sentiment"] = sentiments[i].get("sentiment", "neutro")
                     c["topics"] = sentiments[i].get("topics", [])
+                    mm = sentiments[i].get("motore_menzionato")
+                    if isinstance(mm, dict):
+                        a = normalize_alimentazione(mm.get("alimentazione"))
+                        cc = normalize_cilindrata(mm.get("cilindrata"))
+                        c["motore_menzionato"] = (
+                            {"alimentazione": a, "cilindrata": cc}
+                            if (a or cc is not None) else None
+                        )
+                    else:
+                        c["motore_menzionato"] = None
 
             logger.warning(f"[{source_name}] {source_label} AI analyzed {len(comments)} comments")
             return comments

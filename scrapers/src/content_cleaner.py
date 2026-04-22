@@ -7,18 +7,22 @@ import json
 import httpx
 
 from src.comment_parser import parse_comments
+from src.motore import prompt_enum_description, normalize_cilindrata, normalize_alimentazione
 
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 SENTIMENT_PROMPT = """Analizza questi commenti di utenti da un forum automotive italiano.
-Per OGNI commento restituisci sentiment e topics. Non aggiungere e non rimuovere commenti.
+Per OGNI commento restituisci sentiment, topics e (se menzionata) la motorizzazione. Non aggiungere e non rimuovere commenti.
 
 Topics possibili: prezzo, motore, design, affidabilità, consumi, cambio, comfort, qualità, spazio, tecnologia, assistenza, valore, guida, rumorosità, sicurezza, batteria, autonomia, ricarica
 
+`motore_menzionato` deve essere null se il commento NON cita alcuna motorizzazione/alimentazione.
+Se lo cita: {{"alimentazione": "{alim_enum}", "cilindrata": 1.0}} (cilindrata decimale in litri, null se elettrico puro o non citata).
+
 Restituisci un JSON array con UN oggetto per OGNI commento, nello stesso ordine:
-[{{"sentiment": "positivo|negativo|neutro|misto", "topics": ["topic1", "topic2"]}}]
+[{{"sentiment": "positivo|negativo|neutro|misto", "topics": ["topic1"], "motore_menzionato": null}}]
 
 SOLO il JSON array, nessuna spiegazione.
 
@@ -59,7 +63,10 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
     if len(comments_text) > 30000:
         comments_text = comments_text[:30000] + "\n\n[... altri commenti troncati]"
 
-    prompt = SENTIMENT_PROMPT.format(comments_text=comments_text)
+    prompt = SENTIMENT_PROMPT.format(
+        comments_text=comments_text,
+        alim_enum=prompt_enum_description(),
+    )
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -103,11 +110,22 @@ async def clean_and_extract(content: str, source_name: str, url: str) -> dict:
         comments = []
         for i, c in enumerate(parsed):
             sentiment_data = sentiments[i] if i < len(sentiments) else {}
+            mm = sentiment_data.get("motore_menzionato")
+            if isinstance(mm, dict):
+                a = normalize_alimentazione(mm.get("alimentazione"))
+                cc = normalize_cilindrata(mm.get("cilindrata"))
+                motore_menzionato = (
+                    {"alimentazione": a, "cilindrata": cc}
+                    if (a or cc is not None) else None
+                )
+            else:
+                motore_menzionato = None
             comments.append({
                 "author": c["author"],
                 "text": c["text"],
                 "sentiment": sentiment_data.get("sentiment", "neutro"),
                 "topics": sentiment_data.get("topics", []),
+                "motore_menzionato": motore_menzionato,
             })
 
         logger.warning(f"[{source_name}] AI analyzed {len(comments)} comments with sentiment")
@@ -154,13 +172,28 @@ Per ogni contenuto restituisci un oggetto JSON con questa struttura:
       "anticipo": null
     }}
   ],
-  "motorizzazioni_citate": ["elenco motori/alimentazioni menzionati"],
+  "motorizzazioni_citate": ["elenco motori/alimentazioni menzionati, stringhe libere"],
+  "motore_info": {{
+    "versioni": [
+      {{
+        "alimentazione": "{alim_enum}",
+        "cilindrata": 1.0,
+        "descrizione": "breve descrizione (es. 1.0 TSI 110cv)"
+      }}
+    ]
+  }},
   "target_comunicato": "pubblico target del messaggio (famiglie, giovani, professionisti, etc.)",
   "tono_comunicazione": "sportivo|premium|accessibile|tecnologico|ecologico|familiare|altro",
   "caratteristiche_evidenziate": ["feature tecniche/di design su cui il brand insiste"]
 }}
 
-Se un'informazione non è presente nel contenuto, usa null o lista vuota.
+REGOLE per motore_info.versioni:
+- Un oggetto per OGNI motorizzazione/versione menzionata nel contenuto.
+- `alimentazione`: UNO dei valori canonici: {alim_enum}.
+- `cilindrata`: numero decimale in litri (es. 1.0, 1.5, 2.0). Usa null SOLO se elettrico puro o se la cilindrata non è indicata.
+- Se il contenuto non cita motorizzazioni specifiche, restituisci "motore_info": {{"versioni": []}}.
+
+Se un'altra informazione non è presente nel contenuto, usa null o lista vuota.
 Restituisci un JSON array con UN oggetto per OGNI contenuto analizzato, nello stesso ordine.
 SOLO il JSON array, nessuna spiegazione.
 
@@ -193,7 +226,10 @@ async def analyze_official_content(items: list[dict], brand: str, model: str) ->
     if len(items_text) > 30000:
         items_text = items_text[:30000] + "\n\n[... contenuti troncati]"
 
-    prompt = OFFICIAL_PROMPT.format(brand=brand, model=model, items_text=items_text)
+    prompt = OFFICIAL_PROMPT.format(
+        brand=brand, model=model, items_text=items_text,
+        alim_enum=prompt_enum_description(),
+    )
 
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
@@ -229,6 +265,26 @@ async def analyze_official_content(items: list[dict], brand: str, model: str) ->
             response_text = "\n".join(lines[1:-1]) if len(lines) > 2 else response_text
 
         results = json.loads(response_text)
+
+        # Normalize motore_info to canonical values
+        for r in results:
+            mi = r.get("motore_info") or {}
+            versioni = mi.get("versioni") or []
+            clean = []
+            for v in versioni:
+                if not isinstance(v, dict):
+                    continue
+                a = normalize_alimentazione(v.get("alimentazione"))
+                c = normalize_cilindrata(v.get("cilindrata"))
+                if not a and c is None:
+                    continue
+                clean.append({
+                    "alimentazione": a,
+                    "cilindrata": c,
+                    "descrizione": v.get("descrizione") or None,
+                })
+            r["motore_info"] = {"versioni": clean}
+
         logger.warning(f"AI analyzed {len(results)} official content items for {brand} {model}")
         return results
 

@@ -22,6 +22,74 @@ const PHASE_BADGES = {
     L3: { label: 'L3 Utenti', class: 'phase-l3' },
 };
 
+const ALIMENTAZIONE_LABEL = {
+    benzina: 'Benzina', diesel: 'Diesel', gpl: 'GPL', metano: 'Metano',
+    elettrico: 'Elettrico',
+    ibrido_full: 'Ibrido Full', ibrido_mild: 'Ibrido Mild', ibrido_plugin: 'Plug-in',
+};
+
+function formatMotoreFilter(alim, cil) {
+    const parts = [];
+    if (cil != null) parts.push(`${cil} L`);
+    if (alim) parts.push(ALIMENTAZIONE_LABEL[alim] || alim);
+    return parts.length ? parts.join(' · ') : null;
+}
+
+function buildMotoreFilterBanner(data) {
+    const requested = formatMotoreFilter(data.filter_alimentazione, data.filter_cilindrata);
+    if (!requested) return null;
+
+    const effective = data.filter_effective || {};
+    const perPhase = effective.per_phase || {};
+    const phaseFilter = data.phase_filter || 'all';
+    const phases = phaseFilter === 'all' ? ['L1', 'L2', 'L3'] : [phaseFilter];
+
+    const rows = [];
+    let anyDegraded = false;
+    for (const p of phases) {
+        const ph = perPhase[p];
+        if (!ph) continue;
+        const eff = formatMotoreFilter(ph.alimentazione, ph.cilindrata);
+        const degraded = !!ph.degraded;
+        if (degraded) anyDegraded = true;
+        const eff_label = eff || 'nessun filtro (fallback)';
+        const match_count = ph.matches || 0;
+        const badge = PHASE_BADGES[p];
+        rows.push(`
+            <li class="motore-row ${degraded ? 'degraded' : ''}">
+                <span class="phase-badge ${badge.class}">${badge.label}</span>
+                <span class="motore-eff">${escapeHtml(eff_label)}</span>
+                <span class="motore-matches">${match_count} match</span>
+                ${degraded ? '<span class="motore-degraded-tag">filtro allentato</span>' : ''}
+            </li>
+        `);
+    }
+
+    const banner = document.createElement('div');
+    banner.className = 'motore-banner' + (anyDegraded ? ' has-degraded' : '');
+    banner.innerHTML = `
+        <div class="motore-banner-header">
+            <strong>Filtro motore richiesto:</strong>
+            <span class="motore-requested">${escapeHtml(requested)}</span>
+            <label class="motore-toggle">
+                <input type="checkbox" id="show-non-matches">
+                Mostra anche risultati non pertinenti
+            </label>
+        </div>
+        ${rows.length ? `<ul class="motore-phases">${rows.join('')}</ul>` : ''}
+    `;
+    // Wire toggle to re-render
+    setTimeout(() => {
+        const toggle = document.getElementById('show-non-matches');
+        if (toggle) {
+            toggle.addEventListener('change', () => {
+                document.body.classList.toggle('show-non-matches', toggle.checked);
+            });
+        }
+    }, 0);
+    return banner;
+}
+
 let activePollInterval = null;
 let activeTimerInterval = null;
 let scrapeStartTime = null;
@@ -35,6 +103,9 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
     const brand = document.getElementById('brand').value.trim();
     const model = document.getElementById('model').value.trim();
     const phase = document.getElementById('phase').value || 'all';
+    const alimentazione = document.getElementById('alimentazione').value || null;
+    const cilRaw = document.getElementById('cilindrata').value;
+    const cilindrata = cilRaw ? parseFloat(cilRaw) : null;
     if (!brand) return;
 
     const submitBtn = document.getElementById('submit-btn');
@@ -52,7 +123,7 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ brand, model, phase }),
+            body: JSON.stringify({ brand, model, phase, alimentazione, cilindrata }),
         });
 
         if (!resp.ok) {
@@ -259,11 +330,16 @@ async function loadSessions() {
             el.className = 'session-item';
             const phase = s.phase_filter || 'all';
             const phaseBadge = PHASE_BADGES[phase] || PHASE_BADGES.all;
+            const motoreFilter = formatMotoreFilter(s.filter_alimentazione, s.filter_cilindrata);
+            const motoreBadge = motoreFilter
+                ? `<span class="motore-badge">${escapeHtml(motoreFilter)}</span>`
+                : '';
 
             el.innerHTML = `
                 <div class="session-info" onclick="loadSession('${s.id}')">
                     <strong>${statusIcon} ${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
                     <span class="phase-badge ${phaseBadge.class}">${phaseBadge.label}</span>
+                    ${motoreBadge}
                     <span class="session-date">${dateStr}</span>
                     <span class="session-stats">${s.total_results} risultati \u00B7 ${s.total_comments} commenti</span>
                 </div>
@@ -383,6 +459,14 @@ function renderResults(data, fromSession = false) {
     const brandName = data.brand || '';
     const phaseFilter = data.phase_filter || 'all';
     resultsContainer.innerHTML = '';
+
+    // Motore filter banner (if filter was requested)
+    const hasMotoreFilter = data.filter_alimentazione || data.filter_cilindrata != null;
+    if (hasMotoreFilter) {
+        const banner = buildMotoreFilterBanner(data);
+        if (banner) resultsContainer.appendChild(banner);
+    }
+
     for (const level of LEVELS) {
         if (phaseFilter !== 'all' && phaseFilter !== level.key) continue;
         const sources = grouped[level.key];
@@ -472,6 +556,9 @@ function createSourceCard(source, brandName = '') {
 
         for (const item of source.items) {
             const itemEl = createResultItem(item, source.source);
+            if (item.matches_filter === false) {
+                itemEl.classList.add('non-match');
+            }
             itemsList.appendChild(itemEl);
         }
 
@@ -553,13 +640,19 @@ function renderAiComments(comments) {
     for (const c of comments) {
         const icon = SENTIMENT_ICONS[c.sentiment] || '\u26AA';
         const topics = (c.topics || []).map(t => `<span class="topic-tag">${escapeHtml(t)}</span>`).join(' ');
+        const mm = c.motore_menzionato;
+        const motoreTag = mm
+            ? `<span class="motore-tag-inline">${escapeHtml(formatMotoreFilter(mm.alimentazione, mm.cilindrata) || '')}</span>`
+            : '';
+        const nonMatchCls = c.matches_filter === false ? ' non-match' : '';
         html += `
-            <div class="ai-comment">
+            <div class="ai-comment${nonMatchCls}">
                 <div class="ai-comment-header">
                     <span class="sentiment-icon">${icon}</span>
                     <strong>${escapeHtml(c.author || 'anonimo')}</strong>
                     <span class="sentiment-label ${c.sentiment}">${c.sentiment}</span>
                     ${topics}
+                    ${motoreTag}
                 </div>
                 <div class="ai-comment-text">${escapeHtml(c.text)}</div>
             </div>`;

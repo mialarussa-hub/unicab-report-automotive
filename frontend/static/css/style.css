@@ -710,6 +710,114 @@ footer {
 .phase-badge.phase-l2  { background: #fff3e0; color: #c56000; }
 .phase-badge.phase-l3  { background: #e6f7e6; color: #0a8f2e; }
 
+/* Motore filter badge (sulle session cards) */
+.motore-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: #fce4ec;
+    color: #a31c5b;
+    white-space: nowrap;
+}
+
+/* Form help text + optional hint */
+.form-optional { color: #888; font-weight: 400; font-size: 0.85em; }
+.scraping-form .form-help {
+    flex: 1 1 100%;
+    color: #666;
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+}
+
+/* Motore filter banner (in results) */
+.motore-banner {
+    background: #fff8e1;
+    border-left: 4px solid #f39c12;
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+.motore-banner.has-degraded {
+    background: #fff3e0;
+    border-left-color: #e67e22;
+}
+.motore-banner-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    align-items: center;
+}
+.motore-banner-header strong { font-size: 0.95rem; }
+.motore-requested {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    background: #a31c5b;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.motore-toggle {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: #555;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.motore-phases {
+    list-style: none;
+    margin: 0.7rem 0 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.motore-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    font-size: 0.85rem;
+}
+.motore-row.degraded { color: #c56000; }
+.motore-eff { font-weight: 500; }
+.motore-matches { color: #666; font-size: 0.8rem; }
+.motore-degraded-tag {
+    background: #ffe0b2;
+    color: #c56000;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+/* Inline motore tag on AI comments */
+.motore-tag-inline {
+    display: inline-block;
+    padding: 0.08rem 0.35rem;
+    background: #fce4ec;
+    color: #a31c5b;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+/* Hide non-matching items/comments by default; reveal when body has .show-non-matches */
+.result-item.non-match,
+.ai-comment.non-match {
+    display: none;
+}
+body.show-non-matches .result-item.non-match,
+body.show-non-matches .ai-comment.non-match {
+    display: block;
+    opacity: 0.55;
+    border-left: 3px solid #bbb;
+    padding-left: 0.5rem;
+}
+
 /* Level sections — L1/L2/L3 grouping */
 .level-section {
     margin-bottom: 1.5rem;

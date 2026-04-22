@@ -28,6 +28,8 @@ class ScrapeTestRequest(BaseModel):
     brand: str
     model: str = ""
     phase: str = "all"  # all, L1, L2, L3
+    alimentazione: str | None = None  # canonical enum or None
+    cilindrata: float | None = None   # liters (e.g. 1.0, 1.5) or None
 
 
 # Phase → source_type mapping (mirror of frontend LEVELS)
@@ -36,6 +38,66 @@ PHASE_SOURCE_TYPES = {
     "L2": {"news", "perplexity"},
     "L3": {"forum", "youtube", "social"},
 }
+
+# Cascade thresholds — minimum matches per phase before degrading the filter
+PHASE_MIN_MATCHES = {"L1": 1, "L2": 2, "L3": 10}
+
+ALIMENTAZIONE_CANONICA = {
+    "benzina", "diesel", "gpl", "metano", "elettrico",
+    "ibrido_full", "ibrido_mild", "ibrido_plugin",
+}
+
+
+def _source_type_to_phase(source_type: str | None) -> str:
+    if not source_type:
+        return "L3"
+    for p, types in PHASE_SOURCE_TYPES.items():
+        if source_type in types:
+            return p
+    return "L3"
+
+
+def _motori_match(motore_info, want_alim, want_cil):
+    """Return True if motore_info matches the (alim, cilindrata) filter."""
+    if not want_alim and want_cil is None:
+        return True
+    if not motore_info:
+        return False
+    candidates = []
+    if isinstance(motore_info, dict):
+        versioni = motore_info.get("versioni")
+        if isinstance(versioni, list) and versioni:
+            candidates = versioni
+        else:
+            candidates = [motore_info]
+    for m in candidates:
+        if not isinstance(m, dict):
+            continue
+        m_alim = m.get("alimentazione")
+        m_cil = m.get("cilindrata")
+        try:
+            m_cil = float(m_cil) if m_cil is not None else None
+        except (TypeError, ValueError):
+            m_cil = None
+        if want_alim and m_alim != want_alim:
+            continue
+        if want_cil is not None and (m_cil is None or abs(m_cil - want_cil) > 0.05):
+            continue
+        return True
+    return False
+
+
+def _item_matches(r, want_alim, want_cil):
+    """An L1/L2/L3-thread-level item matches if its motore_info has a matching versione."""
+    return _motori_match(r.motore_info, want_alim, want_cil)
+
+
+def _comment_matches(c: dict, want_alim, want_cil) -> bool:
+    """A single comment matches if its motore_menzionato matches (or no filter)."""
+    if not want_alim and want_cil is None:
+        return True
+    mm = c.get("motore_menzionato")
+    return _motori_match(mm, want_alim, want_cil)
 
 
 class SourceCompleteRequest(BaseModel):
@@ -64,6 +126,77 @@ async def get_user_from_cookie(
     return user
 
 
+async def _compute_effective_filter(db: AsyncSession, session: ScrapingSession) -> dict:
+    """Apply filter cascade per-phase on session results.
+
+    Cascade order: (alim + cilindrata) → (alim only) → (no filter)
+    For each phase, picks the most specific filter meeting PHASE_MIN_MATCHES threshold.
+    Returns dict {per_phase: {L1: {...}, L2: {...}, L3: {...}}, requested: {...}}.
+    """
+    req_alim = session.filter_alimentazione
+    req_cil = float(session.filter_cilindrata) if session.filter_cilindrata is not None else None
+    requested = {"alimentazione": req_alim, "cilindrata": req_cil}
+
+    effective_per_phase: dict[str, dict] = {}
+    if not req_alim and req_cil is None:
+        return {"requested": requested, "per_phase": {}}
+
+    # Load all results grouped by phase
+    res = await db.execute(
+        select(ScrapingResult).where(ScrapingResult.session_id == session.id)
+    )
+    results = res.scalars().all()
+
+    phase_items: dict[str, list] = {"L1": [], "L2": [], "L3": []}
+    for r in results:
+        phase_items[_source_type_to_phase(r.source_type)].append(r)
+
+    # Candidate filter levels in cascade order (most → least specific)
+    candidates = []
+    if req_alim and req_cil is not None:
+        candidates.append(("alim_cil", req_alim, req_cil))
+    if req_alim:
+        candidates.append(("alim_only", req_alim, None))
+    candidates.append(("none", None, None))
+
+    for phase, items in phase_items.items():
+        if not items:
+            effective_per_phase[phase] = {
+                "alimentazione": None, "cilindrata": None,
+                "matches": 0, "degraded": False, "reason": "no_items",
+            }
+            continue
+
+        threshold = PHASE_MIN_MATCHES.get(phase, 1)
+
+        chosen = None
+        for level, a, c in candidates:
+            # For L3, count matching comments; for L1/L2, count matching items
+            if phase == "L3":
+                count = 0
+                for r in items:
+                    for cmt in (r.ai_comments or []):
+                        if _comment_matches(cmt, a, c):
+                            count += 1
+            else:
+                count = sum(1 for r in items if _item_matches(r, a, c))
+
+            if count >= threshold or level == "none":
+                degraded = level != candidates[0][0]
+                chosen = {
+                    "alimentazione": a,
+                    "cilindrata": c,
+                    "matches": count,
+                    "degraded": degraded,
+                    "reason": level,
+                }
+                break
+
+        effective_per_phase[phase] = chosen
+
+    return {"requested": requested, "per_phase": effective_per_phase}
+
+
 @router.post("/run")
 async def run_scraping_test(
     request: ScrapeTestRequest,
@@ -76,6 +209,17 @@ async def run_scraping_test(
     """
     # Validate phase
     phase = request.phase if request.phase in ("all", "L1", "L2", "L3") else "all"
+
+    # Validate motore filter
+    alim = request.alimentazione if request.alimentazione in ALIMENTAZIONE_CANONICA else None
+    cil = request.cilindrata
+    if cil is not None:
+        try:
+            cil = round(float(cil), 1)
+            if cil < 0.5 or cil > 8.5:
+                cil = None
+        except (TypeError, ValueError):
+            cil = None
 
     # Fetch active sources from DB, filtered by phase
     query = select(Source).where(Source.is_active == True)
@@ -103,6 +247,8 @@ async def run_scraping_test(
         status="running",
         total_sources=len(sources_list),
         phase_filter=phase,
+        filter_alimentazione=alim,
+        filter_cilindrata=cil,
         created_by=current_user.id,
     )
     db.add(session)
@@ -120,6 +266,8 @@ async def run_scraping_test(
         "total_sources": len(sources_list),
         "sources_names": [s["name"] for s in sources_list],
         "phase_filter": phase,
+        "filter_alimentazione": alim,
+        "filter_cilindrata": float(cil) if cil is not None else None,
     }
 
 
@@ -180,6 +328,12 @@ async def _run_scraping_background(
                     if not comment_count and ai_comments:
                         comment_count = len(ai_comments)
 
+                    # motore_info: for L1 take from official_info.motore_info, else from summary pipeline
+                    motore_info = item.get("motore_info")
+                    official_info = item.get("ai_official_info")
+                    if motore_info is None and isinstance(official_info, dict):
+                        motore_info = official_info.get("motore_info")
+
                     scraping_result = ScrapingResult(
                         session_id=uuid.UUID(session_id),
                         source_name=source_name,
@@ -193,7 +347,8 @@ async def _run_scraping_background(
                         view_count=item.get("view_count"),
                         like_count=item.get("like_count"),
                         channel=item.get("channel"),
-                        official_info=item.get("ai_official_info"),
+                        official_info=official_info,
+                        motore_info=motore_info,
                     )
                     db.add(scraping_result)
                     total_results += 1
@@ -205,6 +360,10 @@ async def _run_scraping_background(
             session.total_comments = total_comments
             session.total_credits = data.get("total_credits", 0)
             session.duration_ms = data.get("total_duration_ms", 0)
+
+            # Cascade filter per-phase
+            session.filter_effective = await _compute_effective_filter(db, session)
+
             await db.commit()
             logger.info(f"Session {session_id} completed: {total_results} results")
 
@@ -258,6 +417,11 @@ async def source_complete(
         if not comment_count and ai_comments:
             comment_count = len(ai_comments)
 
+        motore_info = item.get("motore_info")
+        official_info = item.get("ai_official_info")
+        if motore_info is None and isinstance(official_info, dict):
+            motore_info = official_info.get("motore_info")
+
         scraping_result = ScrapingResult(
             session_id=uuid.UUID(session_id),
             source_name=source_name,
@@ -271,7 +435,8 @@ async def source_complete(
             view_count=item.get("view_count"),
             like_count=item.get("like_count"),
             channel=item.get("channel"),
-            official_info=item.get("ai_official_info"),
+            official_info=official_info,
+            motore_info=motore_info,
         )
         db.add(scraping_result)
         saved_count += 1
@@ -314,6 +479,9 @@ async def list_sessions(
             "total_credits": s.total_credits,
             "duration_ms": s.duration_ms,
             "phase_filter": s.phase_filter,
+            "filter_alimentazione": s.filter_alimentazione,
+            "filter_cilindrata": float(s.filter_cilindrata) if s.filter_cilindrata is not None else None,
+            "filter_effective": s.filter_effective,
         }
         for s in sessions
     ]
@@ -339,6 +507,10 @@ async def get_session(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # Resolve effective filter per phase (for tagging match flags)
+    effective = session.filter_effective or {}
+    per_phase = (effective.get("per_phase") or {}) if isinstance(effective, dict) else {}
+
     # Group results by source
     sources_map: dict[str, dict] = {}
     for r in session.results:
@@ -355,15 +527,36 @@ async def get_session(
             }
         sources_map[key]["result_count"] += 1
 
+        phase = _source_type_to_phase(r.source_type)
+        ph = per_phase.get(phase) or {}
+        eff_alim = ph.get("alimentazione")
+        eff_cil = ph.get("cilindrata")
+
+        # Tag per-comment match flag
+        tagged_comments = None
+        if r.ai_comments:
+            tagged_comments = []
+            for cmt in r.ai_comments:
+                c = dict(cmt) if isinstance(cmt, dict) else {"text": str(cmt)}
+                c["matches_filter"] = _comment_matches(c, eff_alim, eff_cil)
+                tagged_comments.append(c)
+
+        item_matches = _item_matches(r, eff_alim, eff_cil)
+        # For L3, an item is considered matching if any of its comments match
+        if phase == "L3" and tagged_comments:
+            item_matches = item_matches or any(c.get("matches_filter") for c in tagged_comments)
+
         item = {
             "url": r.url,
             "title": r.title,
             "summary": r.summary,
             "content": r.content,
-            "ai_comments": r.ai_comments,
+            "ai_comments": tagged_comments,
             "ai_comment_count": r.comment_count,
             "content_length": len(r.content) if r.content else 0,
             "scraped": True,
+            "motore_info": r.motore_info,
+            "matches_filter": item_matches,
         }
         if r.view_count is not None:
             item["view_count"] = r.view_count
@@ -381,6 +574,9 @@ async def get_session(
         "started_at": session.started_at.isoformat() if session.started_at else None,
         "status": session.status,
         "phase_filter": session.phase_filter,
+        "filter_alimentazione": session.filter_alimentazione,
+        "filter_cilindrata": float(session.filter_cilindrata) if session.filter_cilindrata is not None else None,
+        "filter_effective": session.filter_effective,
         "sources": list(sources_map.values()),
         "total_credits": session.total_credits,
         "total_duration_ms": session.duration_ms,
