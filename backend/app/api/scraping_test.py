@@ -552,6 +552,9 @@ async def get_session(
         if phase == "L3" and tagged_comments:
             item_matches = item_matches or any(c.get("matches_filter") for c in tagged_comments)
 
+        # Detect Perplexity citation: L1 item with no Claude extraction
+        is_citation = r.source_type == "official" and r.official_info is None
+
         item = {
             "url": r.url,
             "title": r.title,
@@ -560,9 +563,10 @@ async def get_session(
             "ai_comments": tagged_comments,
             "ai_comment_count": r.comment_count,
             "content_length": len(r.content) if r.content else 0,
-            "scraped": True,
+            "scraped": not is_citation,
             "motore_info": r.motore_info,
             "matches_filter": item_matches,
+            "perplexity_citation": is_citation,
         }
         if r.view_count is not None:
             item["view_count"] = r.view_count

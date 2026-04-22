@@ -594,8 +594,19 @@ function createResultItem(item, sourceType) {
     }
 
     // Build content display
+    // L1 citation item (lightweight, no AI extraction) — compact link + snippet
+    if (item.perplexity_citation) {
+        badges += `<span class="scrape-badge citation">Fonte citata</span>`;
+        const host = (() => { try { return new URL(item.url).host.replace(/^www\./, ''); } catch { return item.url; } })();
+        contentHtml = `
+            <div class="citation-compact">
+                <div class="citation-host">${escapeHtml(host)}</div>
+                ${item.content ? `<div class="citation-text">${escapeHtml(item.content)}</div>` : ''}
+                <a class="citation-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener">Apri fonte &rarr;</a>
+            </div>`;
+    }
     // 0. L1: Official brand communication (priority)
-    if (item.ai_official_info) {
+    else if (item.ai_official_info) {
         badges += `<span class="scrape-badge official">L1 Comunicazione ufficiale</span>`;
         contentHtml = renderOfficialInfo(item.ai_official_info);
         // For consolidated (Perplexity) items, append the full synthesis text expander

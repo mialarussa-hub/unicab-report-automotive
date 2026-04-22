@@ -796,6 +796,41 @@ footer {
     overflow-y: auto;
 }
 
+/* Perplexity citation items — compact link-style rendering */
+.scrape-badge.citation {
+    background: #fce4ec;
+    color: #a31c5b;
+    font-weight: 600;
+}
+.citation-compact {
+    padding: 0.5rem 0.7rem;
+    background: #fef7f9;
+    border-left: 3px solid #e91e63;
+    border-radius: 4px;
+    font-size: 0.88rem;
+}
+.citation-host {
+    font-size: 0.75rem;
+    color: #a31c5b;
+    text-transform: lowercase;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+.citation-text {
+    margin: 0.3rem 0;
+    color: #333;
+    line-height: 1.4;
+}
+.citation-link {
+    display: inline-block;
+    margin-top: 0.2rem;
+    color: #1a56db;
+    text-decoration: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.citation-link:hover { text-decoration: underline; }
+
 .official-positioning { margin-bottom: 0.4rem; }
 .official-claim {
     font-style: italic;

@@ -1045,17 +1045,33 @@ async def _scrape_official_source(
     all_items.extend(pplx_items)
 
     # D) AI analysis — information extraction (not sentiment)
-    if all_items:
+    # Exclude lightweight Perplexity citation items: no point extracting specs
+    # from a dealer-page snippet. They're just pointers for the user.
+    items_to_analyze = [it for it in all_items if not it.get("perplexity_citation")]
+    if items_to_analyze:
         from src.content_cleaner import analyze_official_content
-        analyzed = await analyze_official_content(all_items, brand, model)
+        analyzed = await analyze_official_content(items_to_analyze, brand, model)
         if analyzed:
             for i, info in enumerate(analyzed):
-                if i < len(all_items):
-                    # Preserve Perplexity provenance inside the persisted JSONB
-                    if all_items[i].get("perplexity_consolidated"):
+                if i < len(items_to_analyze):
+                    item = items_to_analyze[i]
+                    if item.get("perplexity_consolidated"):
                         info["fonte_consolidata"] = True
-                        info["fonti_citate"] = all_items[i].get("perplexity_citations", [])
-                    all_items[i]["ai_official_info"] = info
+                        info["fonti_citate"] = item.get("perplexity_citations", [])
+                    item["ai_official_info"] = info
+
+    # Propagate consolidated item's motore_info to its citation siblings so the
+    # filter cascade shows them alongside the synthesis (they share the same
+    # alim/cil context by construction).
+    consolidated_info = next(
+        (it.get("ai_official_info") for it in all_items if it.get("perplexity_consolidated")),
+        None,
+    )
+    if consolidated_info and consolidated_info.get("motore_info"):
+        shared_motore = consolidated_info["motore_info"]
+        for it in all_items:
+            if it.get("perplexity_citation"):
+                it["motore_info"] = shared_motore
 
     return SourceResult(
         source=name, source_type="official", status="ok" if all_items else "partial",
@@ -1146,16 +1162,33 @@ async def _scrape_official_perplexity(
         f"{len(citations_list)} citations"
     )
 
-    return [{
+    items: list[dict] = []
+
+    # 1) Consolidated synthesis item — feeds Claude analysis for structured fields
+    items.append({
         "url": top_url,
-        "title": f"{brand} {model}{title_suffix} — Ricerca ufficiale consolidata",
+        "title": f"{brand} {model}{title_suffix} — Sintesi ufficiale consolidata",
         "content": (resp.answer + citations_text)[:15000],
         "content_length": len(resp.answer) + len(citations_text),
         "source_type": "official",
         "scraped": True,
         "perplexity_citations": citations_list,
         "perplexity_consolidated": True,
-    }]
+    })
+
+    # 2) One lightweight item per cited source — so the user sees N fonti as in Perplexity UI
+    for c in citations_list:
+        items.append({
+            "url": c["url"],
+            "title": c["title"] or c["url"],
+            "content": c["snippet"] or "",
+            "content_length": len(c["snippet"] or ""),
+            "source_type": "official",
+            "scraped": False,  # only the snippet, not a full scrape
+            "perplexity_citation": True,
+        })
+
+    return items
 
 
 async def _scrape_official_website(
