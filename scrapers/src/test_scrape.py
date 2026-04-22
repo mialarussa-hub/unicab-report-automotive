@@ -1288,35 +1288,97 @@ async def _scrape_official_website(
 
     logger.warning(f"[{source_name}] Found {len(relevant_urls)} relevant official pages")
 
-    # Step 2: Scrape top pages (max 5 to control credits)
-    max_pages = min(5, len(relevant_urls))
-    for u in relevant_urls[:max_pages]:
-        page_url = u.get("url", "")
-        if not page_url:
-            continue
+    # Step 2: scrape the PRIMARY page first so we can discover trim slugs from its content.
+    MAX_PAGES = 15
+    scraped_urls: set[str] = set()
 
+    def _scrape_one(u: dict) -> int:
+        """Scrape a single URL, append to items, return credits used. Tolerant to failures."""
+        page_url = u.get("url", "")
+        if not page_url or page_url in scraped_urls:
+            return 0
+        scraped_urls.add(page_url)
         logger.warning(f"[{source_name}] SCRAPE: {page_url}")
         resp = client.scrape(page_url)
-        total_credits += resp.credits_used
-
+        credits = resp.credits_used
         if resp.error or not resp.results:
             logger.warning(f"[{source_name}] Scrape error: {resp.error}")
-            continue
-
+            return credits
         content = resp.results[0].content
         title = resp.results[0].title
-
         if not content or len(content) < 100:
-            continue
-
+            return credits
         items.append({
             "url": page_url,
             "title": title or u.get("title", ""),
-            "content": content[:10000],  # Cap for AI analysis
+            "content": content[:10000],
             "content_length": len(content),
             "source_type": "official",
             "scraped": True,
         })
+        return credits
+
+    primary = relevant_urls[0]
+    total_credits += _scrape_one(primary)
+
+    # Step 3: AI discovers trim slugs from the primary page content
+    primary_content = items[0]["content"] if items else ""
+    trim_slugs: list[str] = []
+    if primary_content:
+        try:
+            from src.content_cleaner import discover_trim_slugs
+            trim_slugs = await discover_trim_slugs(primary_content, brand, model)
+        except Exception as e:
+            logger.warning(f"[{source_name}] Trim slug discovery error: {e}")
+
+    # Step 4: rank remaining URLs with L1-aware boosts, then scrape up to MAX_PAGES total
+    SPEC_KEYWORDS = (
+        "technical-data", "technical_data", "specifiche-tecniche", "specifiche_tecniche",
+        "scheda-tecnica", "scheda_tecnica", "dati-tecnici", "dati_tecnici", "spec-sheet",
+    )
+    PRICING_KEYWORDS = (
+        "configuratore", "configurator", "listino", "prezzi", "allestimenti",
+        "versioni", "trim", "equipaggiamenti", "dotazione", "dotazioni",
+    )
+
+    def _boost(url_item: dict) -> int:
+        url = (url_item.get("url") or "").lower()
+        title = (url_item.get("title") or "").lower()
+        path_parts = [p for p in url.split("/") if p]
+        score = 0
+        # Trim slug in any path segment: +30 per distinct match
+        if trim_slugs:
+            for seg in path_parts:
+                for slug in trim_slugs:
+                    if slug and slug in seg:
+                        score += 30
+                        break
+        # Spec / tech pages: +25
+        if any(kw in url for kw in SPEC_KEYWORDS):
+            score += 25
+        # Pricing / configurator / trim listing: +20
+        if any(kw in url for kw in PRICING_KEYWORDS):
+            score += 20
+        # PDF brochure/spec sheet: +15
+        if url.endswith(".pdf") or ".pdf" in url:
+            score += 15
+        return score
+
+    # Score all remaining URLs (skip the primary we already scraped)
+    candidates = [u for u in relevant_urls[1:] if u.get("url") not in scraped_urls]
+    for u in candidates:
+        u["_l1_boost"] = _boost(u)
+    # Sort: boost desc, original order preserved as tiebreaker via stable sort
+    candidates.sort(key=lambda u: u.get("_l1_boost", 0), reverse=True)
+
+    slots_left = MAX_PAGES - len(scraped_urls)
+    for u in candidates[:slots_left]:
+        total_credits += _scrape_one(u)
+
+    logger.warning(
+        f"[{source_name}] Scraped {len(items)} official pages "
+        f"(trim slugs found: {trim_slugs or 'none'})"
+    )
 
     return items, total_credits
 

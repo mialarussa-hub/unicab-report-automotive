@@ -572,3 +572,82 @@ async def aggregate_official_content(
     except Exception as e:
         logger.error(f"Claude aggregate error: {e}")
         return None
+
+
+async def discover_trim_slugs(content: str, brand: str, model: str) -> list[str]:
+    """Mini-call to Claude Haiku: identify trim/allestimento slugs from the model page.
+
+    Takes the scraped text of the main model page and returns a lowercase list of
+    URL-friendly slugs (e.g. ['pop', 'icon', 'la-prima', 'red']). These are then used
+    to boost per-trim subpages in the URL ranker so we scrape them too.
+
+    Returns empty list on any failure — caller should fall back to no-boost ranking.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key or not content:
+        return []
+
+    snippet = content[:8000]
+
+    prompt = f"""Leggi questo contenuto estratto dalla pagina ufficiale {brand} {model}.
+Identifica gli ALLESTIMENTI / VERSIONI commerciali citati (es. Pop, Icon, La Prima, RED, Cross, Sport, M-Sport, R-Line, GTI, Abarth).
+
+NON includere:
+- Motorizzazioni (benzina, diesel, ibrido, plug-in, elettrico, hybrid)
+- Tagli di cilindrata (1.0, 1.5 TSI, 2.0 TDI)
+- Nomi di modello o marca
+
+Restituisci SOLO un JSON array di stringhe in lowercase, URL-friendly (trattini al posto degli spazi). Esempio: ["pop", "icon", "la-prima", "red"]
+
+Se nessun allestimento è chiaramente identificabile, restituisci [].
+
+CONTENUTO:
+
+{snippet}"""
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 256,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            if resp.status_code != 200:
+                logger.warning(f"Haiku trim-slug API {resp.status_code}: {resp.text[:200]}")
+                return []
+            data = resp.json()
+            text = ""
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    text += block.get("text", "")
+            text = text.strip()
+            if text.startswith("```"):
+                lines = text.split("\n")
+                text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+
+        arr = json.loads(text)
+        if not isinstance(arr, list):
+            return []
+        # Normalize: lowercase, strip, hyphenate spaces, drop empties and duplicates
+        seen = set()
+        out = []
+        for s in arr:
+            if not isinstance(s, str):
+                continue
+            slug = s.strip().lower().replace(" ", "-")
+            if slug and slug not in seen:
+                seen.add(slug)
+                out.append(slug)
+        logger.warning(f"Discovered trim slugs for {brand} {model}: {out}")
+        return out
+    except Exception as e:
+        logger.warning(f"Trim slug discovery failed for {brand} {model}: {e}")
+        return []
