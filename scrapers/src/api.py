@@ -17,6 +17,8 @@ class SourceConfig(BaseModel):
 class ScrapeTestRequest(BaseModel):
     brand: str
     model: str = ""
+    alimentazione: str | None = None
+    cilindrata: float | None = None
     sources: list[SourceConfig] = []
     session_id: str | None = None
     callback_url: str | None = None
@@ -33,6 +35,8 @@ async def scrape_test(request: ScrapeTestRequest):
     sources_dicts = [s.model_dump() for s in request.sources]
     result = await run_test_scrape(
         request.brand, request.model, sources_dicts,
+        alimentazione=request.alimentazione,
+        cilindrata=request.cilindrata,
         session_id=request.session_id,
         callback_url=request.callback_url,
     )

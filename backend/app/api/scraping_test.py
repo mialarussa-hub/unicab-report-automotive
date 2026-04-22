@@ -257,7 +257,10 @@ async def run_scraping_test(
 
     # Launch scraping in background — returns immediately
     asyncio.create_task(
-        _run_scraping_background(str(session.id), request.brand, request.model, sources_list)
+        _run_scraping_background(
+            str(session.id), request.brand, request.model, sources_list,
+            alim, float(cil) if cil is not None else None,
+        )
     )
 
     return {
@@ -272,7 +275,8 @@ async def run_scraping_test(
 
 
 async def _run_scraping_background(
-    session_id: str, brand: str, model: str, sources_list: list[dict]
+    session_id: str, brand: str, model: str, sources_list: list[dict],
+    alimentazione: str | None = None, cilindrata: float | None = None,
 ):
     """Background task: call scrapers service, finalize session on completion."""
     try:
@@ -282,6 +286,8 @@ async def _run_scraping_background(
                 json={
                     "brand": brand,
                     "model": model,
+                    "alimentazione": alimentazione,
+                    "cilindrata": cilindrata,
                     "sources": sources_list,
                     "session_id": session_id,
                     "callback_url": "http://api:8000/api/scraping-test/source-complete",

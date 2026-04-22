@@ -672,6 +672,9 @@ function renderOfficialInfo(info) {
     };
     const tipo = tipoLabel[info.tipo_contenuto] || info.tipo_contenuto || 'Contenuto';
     html += `<div class="official-tipo"><span class="official-tipo-badge">${escapeHtml(tipo)}</span>`;
+    if (info.fonte_consolidata) {
+        html += ` <span class="official-consolidated">Ufficiale consolidato (Perplexity)</span>`;
+    }
     if (info.tono_comunicazione) {
         html += ` <span class="official-tono">${escapeHtml(info.tono_comunicazione)}</span>`;
     }
@@ -733,6 +736,23 @@ function renderOfficialInfo(info) {
     }
     if (info.target_comunicato) {
         html += `<div class="official-target"><strong>Target:</strong> ${escapeHtml(info.target_comunicato)}</div>`;
+    }
+
+    // Citations list (from Perplexity consolidated items)
+    const fonti = info.fonti_citate || [];
+    if (fonti.length > 0) {
+        html += `<details class="official-citations">
+            <summary>Fonti citate (${fonti.length})</summary>
+            <ul>`;
+        for (const f of fonti) {
+            const label = f.title || f.url;
+            html += `<li><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`;
+            if (f.snippet) {
+                html += `<div class="citation-snippet">${escapeHtml(f.snippet)}</div>`;
+            }
+            html += `</li>`;
+        }
+        html += `</ul></details>`;
     }
 
     html += '</div>';

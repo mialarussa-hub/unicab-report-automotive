@@ -136,6 +136,7 @@ class TestScrapeResponse:
 
 async def run_test_scrape(
     brand: str, model: str = "", sources: list[dict] = None,
+    alimentazione: str | None = None, cilindrata: float | None = None,
     session_id: str | None = None, callback_url: str | None = None,
 ) -> dict:
     """Run 2-step scrapers on configured sources.
@@ -150,7 +151,7 @@ async def run_test_scrape(
 
     async def _scrape_and_notify(source: dict) -> SourceResult:
         """Scrape one source and optionally notify backend when done."""
-        result = await _scrape_source(brand, model, source)
+        result = await _scrape_source(brand, model, source, alimentazione, cilindrata)
 
         # Generate summaries for this source immediately
         if result.items:
@@ -194,7 +195,9 @@ async def run_test_scrape(
     ))
 
 
-async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
+async def _scrape_source(brand: str, model: str, source: dict,
+                         alimentazione: str | None = None,
+                         cilindrata: float | None = None) -> SourceResult:
     """Route to the right scraper based on source type and URL."""
     source_type = source.get("source_type", "news")
     url = source.get("url", "")
@@ -206,16 +209,18 @@ async def _scrape_source(brand: str, model: str, source: dict) -> SourceResult:
     elif source_type == "youtube":
         return await _scrape_youtube_source(brand, model, source)
     else:
-        return await _scrape_web_source(brand, model, source)
+        return await _scrape_web_source(brand, model, source, alimentazione, cilindrata)
 
 
-async def _scrape_web_source(brand: str, model: str, source: dict) -> SourceResult:
+async def _scrape_web_source(brand: str, model: str, source: dict,
+                             alimentazione: str | None = None,
+                             cilindrata: float | None = None) -> SourceResult:
     """Route to platform-specific strategy."""
     source_type = source.get("source_type", "news")
     url = source.get("url", "")
 
     if source_type == "official":
-        return await _scrape_official_source(brand, model, source)
+        return await _scrape_official_source(brand, model, source, alimentazione, cilindrata)
     elif source_type == "forum":
         return await _scrape_forum_source(brand, model, source)
     elif "alvolante.it" in url:
@@ -999,47 +1004,57 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
 # L1: Official manufacturer communication scraper
 # ---------------------------------------------------------------------------
 
-async def _scrape_official_source(brand: str, model: str, source: dict) -> SourceResult:
-    """L1 strategy: scrape official brand channels for manufacturer communication.
+async def _scrape_official_source(
+    brand: str, model: str, source: dict,
+    alimentazione: str | None = None, cilindrata: float | None = None,
+) -> SourceResult:
+    """L1 strategy: gather official manufacturer communication.
 
-    Combines two sub-strategies:
-    A) Official website — product pages, pricing, promotions via firecrawl map+scrape
-    B) Official YouTube — brand channel videos about the model
+    Layered approach:
+    A) Direct brand website — product pages, pricing, promotions (Firecrawl)
+    B) Direct brand YouTube channel — videos on the model
+    C) Consolidated research via Perplexity Sonar Pro — citations from dealer
+       network, listini, spec sheets that report official data. Always runs;
+       crucial for brands with poor indexable websites (EVO, DR, etc.).
     """
     start = time.time()
     name = source.get("name", "Unknown")
     official = get_official_urls(brand)
 
-    if not official:
-        return SourceResult(
-            source=name, source_type="official", status="error",
-            error=f"No official URLs configured for brand '{brand}'",
-            duration_ms=int((time.time() - start) * 1000),
-        )
-
     all_items = []
     total_credits = 0
 
-    # A) Scrape official website
-    website = official.get("website")
-    if website:
-        web_items, web_credits = await _scrape_official_website(brand, model, website, name)
+    # A) Scrape official website (if brand has one configured)
+    if official and official.get("website"):
+        web_items, web_credits = await _scrape_official_website(
+            brand, model, official["website"], name
+        )
         all_items.extend(web_items)
         total_credits += web_credits
 
-    # B) Scrape official YouTube channel
-    yt_channel_id = official.get("youtube_channel_id")
-    if yt_channel_id:
-        yt_items = await _scrape_official_youtube(brand, model, yt_channel_id, name)
+    # B) Scrape official YouTube channel (if configured)
+    if official and official.get("youtube_channel_id"):
+        yt_items = await _scrape_official_youtube(
+            brand, model, official["youtube_channel_id"], name
+        )
         all_items.extend(yt_items)
 
-    # C) AI analysis — information extraction (not sentiment)
+    # C) Perplexity Sonar Pro — always runs, consolidates official data across
+    # dealer network, listini, schede tecniche. Key fallback for low-presence brands.
+    pplx_items = await _scrape_official_perplexity(brand, model, name, alimentazione, cilindrata)
+    all_items.extend(pplx_items)
+
+    # D) AI analysis — information extraction (not sentiment)
     if all_items:
         from src.content_cleaner import analyze_official_content
         analyzed = await analyze_official_content(all_items, brand, model)
         if analyzed:
             for i, info in enumerate(analyzed):
                 if i < len(all_items):
+                    # Preserve Perplexity provenance inside the persisted JSONB
+                    if all_items[i].get("perplexity_consolidated"):
+                        info["fonte_consolidata"] = True
+                        info["fonti_citate"] = all_items[i].get("perplexity_citations", [])
                     all_items[i]["ai_official_info"] = info
 
     return SourceResult(
@@ -1048,6 +1063,99 @@ async def _scrape_official_source(brand: str, model: str, source: dict) -> Sourc
         error=None if all_items else "No official content found",
         duration_ms=int((time.time() - start) * 1000),
     )
+
+
+async def _scrape_official_perplexity(
+    brand: str, model: str, source_name: str,
+    alimentazione: str | None = None, cilindrata: float | None = None,
+) -> list[dict]:
+    """L1 research via Perplexity Sonar Pro — consolidated official communication.
+
+    One focused query, narrowed by alimentazione/cilindrata if provided.
+    Returns 1 synthesized item with full answer as content + citations listed
+    in the item's metadata. Consumed downstream by analyze_official_content to
+    extract structured official_info.
+    """
+    from src.perplexity_client import PerplexityClient
+
+    client = PerplexityClient(model="sonar-pro")
+    if not client.api_key:
+        logger.warning(f"[{source_name}] PERPLEXITY_API_KEY not set, skipping L1 Perplexity")
+        return []
+
+    # Build focused user query
+    from src.motore import ALIMENTAZIONE_LABEL_IT
+    variant_parts = []
+    if cilindrata is not None:
+        variant_parts.append(f"{cilindrata:.1f}".rstrip("0").rstrip("."))
+    if alimentazione:
+        variant_parts.append(ALIMENTAZIONE_LABEL_IT.get(alimentazione, alimentazione))
+    variant_suffix = f" {' '.join(variant_parts)}" if variant_parts else ""
+
+    system = (
+        "Sei un analista di dati ufficiali del mercato auto italiano. "
+        "Rispondi SOLO con dati ufficiali dichiarati dal costruttore (sito ufficiale, "
+        "listini, comunicati stampa, schede tecniche diffuse dalla rete dealer ufficiale). "
+        "Escludi opinioni, recensioni di magazine, commenti utenti. "
+        "Se un dato non è disponibile pubblicamente, dichiaralo esplicitamente."
+    )
+
+    user = (
+        f"Estrai tutti i dati ufficiali dichiarati da {brand} per il modello "
+        f"{brand} {model}{variant_suffix}.\n\n"
+        "Includi per ogni versione/allestimento citato:\n"
+        "- Prezzo di listino chiavi in mano (EUR) e note (incentivi inclusi/esclusi, IPT, ecc.)\n"
+        "- Motore: cilindrata in cc e in litri, CV / kW, coppia (Nm), cilindri, alimentazione, cambio\n"
+        "- Consumi WLTP (l/100km o kWh/100km) ed emissioni CO2 (g/km)\n"
+        "- Dotazione principale (ADAS, infotainment, comfort)\n"
+        "- Dimensioni (lunghezza, larghezza, altezza, passo, peso, bagagliaio)\n"
+        "- Garanzia ufficiale (anni / km)\n"
+        "- Promozioni finanziarie attive dichiarate dal costruttore (rata, durata, anticipo, scadenza)\n"
+        "- Allestimenti/versioni disponibili\n\n"
+        "Cita sempre le fonti. Distingui i dati della versione richiesta dai dati di gamma."
+    )
+
+    resp = await client.ask(query=user, system_prompt=system, recency="year")
+
+    if resp.error:
+        logger.warning(f"[{source_name}] Perplexity L1 error: {resp.error}")
+        return []
+
+    if not resp.answer:
+        logger.warning(f"[{source_name}] Perplexity L1 returned empty answer")
+        return []
+
+    # Build one consolidated item carrying the answer as content, citations as metadata
+    citations_list = [
+        {"url": c.url, "title": c.title, "snippet": c.snippet}
+        for c in resp.citations
+    ]
+    # Use top citation URL as canonical URL for the item, fallback to a marker
+    top_url = resp.citations[0].url if resp.citations else "perplexity://consolidated"
+    title_suffix = f" ({variant_suffix.strip()})" if variant_suffix else ""
+
+    # Embed citations inline at the end of content so Claude sees them during extraction
+    citations_text = ""
+    if citations_list:
+        citations_text = "\n\n--- Fonti citate ---\n" + "\n".join(
+            f"- {c['title'] or c['url']}: {c['url']}" for c in citations_list
+        )
+
+    logger.warning(
+        f"[{source_name}] Perplexity L1 returned {len(resp.answer)} chars, "
+        f"{len(citations_list)} citations"
+    )
+
+    return [{
+        "url": top_url,
+        "title": f"{brand} {model}{title_suffix} — Ricerca ufficiale consolidata",
+        "content": (resp.answer + citations_text)[:15000],
+        "content_length": len(resp.answer) + len(citations_text),
+        "source_type": "official",
+        "scraped": True,
+        "perplexity_citations": citations_list,
+        "perplexity_consolidated": True,
+    }]
 
 
 async def _scrape_official_website(
