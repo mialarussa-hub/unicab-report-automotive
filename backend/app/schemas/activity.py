@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 class ActivityCreate(BaseModel):
     activity_date: date
-    description: str = Field(..., max_length=500)
+    description: str = Field(..., max_length=2000)
     hours: float = Field(..., gt=0, le=24)
     category: str
     notes: str | None = None
@@ -16,7 +16,7 @@ class ActivityCreate(BaseModel):
 
 class ActivityUpdate(BaseModel):
     activity_date: date | None = None
-    description: str | None = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=2000)
     hours: float | None = Field(None, gt=0, le=24)
     category: str | None = None
     notes: str | None = None

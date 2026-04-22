@@ -17,7 +17,7 @@ class Activity(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     activity_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str] = mapped_column(String(2000), nullable=False)
     hours: Mapped[float] = mapped_column(Float, nullable=False)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
