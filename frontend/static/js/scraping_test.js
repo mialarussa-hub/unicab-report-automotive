@@ -517,11 +517,7 @@ function renderResults(data, fromSession = false) {
 
 function createSourceCard(source, brandName = '') {
     const icon = TYPE_ICONS[source.source_type] || '\uD83D\uDCC4';
-    // Override name for official sources: show "{Brand} Ufficiale" instead of DB name
-    const displayName = source.source_type === 'official' && brandName
-        ? `${brandName} Ufficiale`
-        : source.source;
-    const info = { name: displayName, icon: icon };
+    const info = { name: source.source, icon: icon };
     const status = STATUS_LABELS[source.status] || STATUS_LABELS.error;
 
     const card = document.createElement('div');
