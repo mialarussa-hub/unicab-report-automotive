@@ -311,7 +311,7 @@ BRAND_MODELS = {
     "DR": {
         "aliases": ["DR Automobiles"],
         "official": {
-            "website": "https://www.dr-automobiles.com",
+            "website": "https://www.drautomobiles.com",
             "youtube_channel_id": None,  # No dedicated YouTube channel found
         },
         "models": {
