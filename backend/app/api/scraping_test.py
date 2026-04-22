@@ -130,6 +130,21 @@ async def get_user_from_cookie(
     return user
 
 
+async def get_admin_from_cookie(
+    user: User = Depends(get_user_from_cookie),
+) -> User:
+    """Enforce admin role on top of cookie auth. Used to lock internal endpoints
+    (scraping, sources management, timesheet) away from client-role users like
+    the UNICAB team (Paolo) who should only see reports.
+    """
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return user
+
+
 async def _compute_effective_filter(db: AsyncSession, session: ScrapingSession) -> dict:
     """Apply filter cascade per-phase on session results.
 
@@ -205,7 +220,7 @@ async def _compute_effective_filter(db: AsyncSession, session: ScrapingSession) 
 async def run_scraping_test(
     request: ScrapeTestRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     """Launch scraping asynchronously — returns immediately with session_id.
 
@@ -405,7 +420,7 @@ async def _run_scraping_background(
 async def cancel_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     """Cancel a running scrape: mark session 'cancelled' + cancel the async task.
 
@@ -519,7 +534,7 @@ async def source_complete(
 @router.get("/sessions")
 async def list_sessions(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     """List all scraping sessions for the current user."""
     result = await db.execute(
@@ -555,7 +570,7 @@ async def list_sessions(
 async def get_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     """Get session details with all results, formatted like scraper response."""
     result = await db.execute(
@@ -655,7 +670,7 @@ async def get_session(
 async def delete_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     """Delete a scraping session and all its results."""
     result = await db.execute(

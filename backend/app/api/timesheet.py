@@ -8,7 +8,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import select, extract, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.scraping_test import get_user_from_cookie
+from app.api.scraping_test import get_admin_from_cookie
 from app.database import get_db
 from app.models.activity import Activity
 from app.models.user import User
@@ -42,7 +42,7 @@ def _parse_month(month: str | None) -> tuple[int, int] | None:
 async def monthly_summary(
     month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     parsed = _parse_month(month)
     if not parsed:
@@ -82,7 +82,7 @@ async def monthly_summary(
 async def export_month(
     month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     parsed = _parse_month(month)
     if not parsed:
@@ -137,7 +137,7 @@ async def export_month(
 async def list_activities(
     month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     stmt = select(Activity).where(Activity.created_by == current_user.id)
 
@@ -158,7 +158,7 @@ async def list_activities(
 async def create_activity(
     data: ActivityCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     if data.category not in ALLOWED_CATEGORIES:
         raise HTTPException(
@@ -185,7 +185,7 @@ async def update_activity(
     activity_id: str,
     data: ActivityUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     result = await db.execute(
         select(Activity).where(
@@ -213,7 +213,7 @@ async def update_activity(
 async def delete_activity(
     activity_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     result = await db.execute(
         select(Activity).where(

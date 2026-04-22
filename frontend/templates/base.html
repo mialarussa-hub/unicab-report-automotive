@@ -13,9 +13,11 @@
             {% if user %}
             <div class="nav-links">
                 <a href="/frontend/dashboard">Dashboard</a>
+                {% if user.is_admin %}
                 <a href="/frontend/sources">Fonti</a>
                 <a href="/frontend/scraping-test">Test Scraping</a>
                 <a href="/frontend/timesheet">Timesheet</a>
+                {% endif %}
                 <span>{{ user.full_name }}</span>
                 <a href="/frontend/logout">Logout</a>
             </div>

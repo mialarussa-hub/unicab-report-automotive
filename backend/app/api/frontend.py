@@ -101,6 +101,8 @@ async def sources_page(request: Request, db: AsyncSession = Depends(get_db)):
     user = await _get_user_from_cookie(request, db)
     if not user:
         return RedirectResponse(url="/frontend/login")
+    if not user.is_admin:
+        return RedirectResponse(url="/frontend/dashboard")
     return templates.TemplateResponse(request, "sources.html", {"user": user})
 
 
@@ -109,6 +111,8 @@ async def scraping_test_page(request: Request, db: AsyncSession = Depends(get_db
     user = await _get_user_from_cookie(request, db)
     if not user:
         return RedirectResponse(url="/frontend/login")
+    if not user.is_admin:
+        return RedirectResponse(url="/frontend/dashboard")
     return templates.TemplateResponse(request, "scraping_test.html", {"user": user})
 
 
@@ -117,6 +121,8 @@ async def timesheet_page(request: Request, db: AsyncSession = Depends(get_db)):
     user = await _get_user_from_cookie(request, db)
     if not user:
         return RedirectResponse(url="/frontend/login")
+    if not user.is_admin:
+        return RedirectResponse(url="/frontend/dashboard")
     return templates.TemplateResponse(request, "timesheet.html", {"user": user})
 
 

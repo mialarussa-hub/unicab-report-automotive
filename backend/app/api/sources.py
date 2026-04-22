@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.scraping_test import get_user_from_cookie
+from app.api.scraping_test import get_admin_from_cookie
 from app.database import get_db
 from app.models.source import Source
 from app.models.user import User
@@ -18,7 +18,7 @@ router = APIRouter()
 @router.get("/", response_model=list[SourceRead])
 async def list_sources(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     result = await db.execute(select(Source).order_by(Source.name))
     return result.scalars().all()
@@ -28,7 +28,7 @@ async def list_sources(
 async def create_source(
     source_in: SourceCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     source = Source(
         name=source_in.name,
@@ -45,7 +45,7 @@ async def create_source(
 async def delete_source(
     source_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     result = await db.execute(select(Source).where(Source.id == uuid.UUID(source_id)))
     source = result.scalar_one_or_none()
@@ -59,7 +59,7 @@ async def delete_source(
 async def toggle_source(
     source_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_user_from_cookie),
+    current_user: User = Depends(get_admin_from_cookie),
 ):
     result = await db.execute(select(Source).where(Source.id == uuid.UUID(source_id)))
     source = result.scalar_one_or_none()
