@@ -161,6 +161,11 @@ footer {
     min-width: 200px;
 }
 
+.scraping-form .form-group-small {
+    flex: 0 0 240px;
+    min-width: 240px;
+}
+
 .scraping-form label {
     display: block;
     margin-bottom: 0.3rem;
@@ -168,12 +173,14 @@ footer {
     font-size: 0.9rem;
 }
 
-.scraping-form input {
+.scraping-form input,
+.scraping-form select {
     width: 100%;
     padding: 0.6rem;
     border: 1px solid var(--border);
     border-radius: 4px;
     font-size: 1rem;
+    background: white;
 }
 
 .scraping-form button {
@@ -686,6 +693,22 @@ footer {
     color: #1a56db;
     font-weight: 600;
 }
+
+/* Phase badges — shown on session cards and progress card */
+.phase-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+.phase-badge.phase-all { background: #e9ecef; color: #555; }
+.phase-badge.phase-l1  { background: #e8edff; color: #1a56db; }
+.phase-badge.phase-l2  { background: #fff3e0; color: #c56000; }
+.phase-badge.phase-l3  { background: #e6f7e6; color: #0a8f2e; }
 
 /* Level sections — L1/L2/L3 grouping */
 .level-section {

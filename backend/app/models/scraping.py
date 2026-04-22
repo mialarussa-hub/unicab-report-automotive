@@ -24,6 +24,7 @@ class ScrapingSession(Base):
     total_comments: Mapped[int] = mapped_column(Integer, default=0)
     total_credits: Mapped[int] = mapped_column(Integer, default=0)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    phase_filter: Mapped[str] = mapped_column(String(10), default="all", nullable=False)  # all, L1, L2, L3
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

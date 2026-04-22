@@ -27,6 +27,15 @@ SCRAPERS_URL = "http://scrapers:8001"
 class ScrapeTestRequest(BaseModel):
     brand: str
     model: str = ""
+    phase: str = "all"  # all, L1, L2, L3
+
+
+# Phase → source_type mapping (mirror of frontend LEVELS)
+PHASE_SOURCE_TYPES = {
+    "L1": {"official"},
+    "L2": {"news", "perplexity"},
+    "L3": {"forum", "youtube", "social"},
+}
 
 
 class SourceCompleteRequest(BaseModel):
@@ -65,8 +74,15 @@ async def run_scraping_test(
 
     The frontend polls GET /sessions/{id} to track progress in real time.
     """
-    # Fetch active sources from DB
-    result = await db.execute(select(Source).where(Source.is_active == True))
+    # Validate phase
+    phase = request.phase if request.phase in ("all", "L1", "L2", "L3") else "all"
+
+    # Fetch active sources from DB, filtered by phase
+    query = select(Source).where(Source.is_active == True)
+    if phase != "all":
+        allowed_types = PHASE_SOURCE_TYPES[phase]
+        query = query.where(Source.source_type.in_(allowed_types))
+    result = await db.execute(query)
     sources = result.scalars().all()
 
     sources_list = [
@@ -74,12 +90,19 @@ async def run_scraping_test(
         for s in sources
     ]
 
+    if not sources_list:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Nessuna fonte attiva per la fase '{phase}'",
+        )
+
     # Create session
     session = ScrapingSession(
         brand=request.brand,
         model=request.model or None,
         status="running",
         total_sources=len(sources_list),
+        phase_filter=phase,
         created_by=current_user.id,
     )
     db.add(session)
@@ -96,6 +119,7 @@ async def run_scraping_test(
         "status": "running",
         "total_sources": len(sources_list),
         "sources_names": [s["name"] for s in sources_list],
+        "phase_filter": phase,
     }
 
 
@@ -289,6 +313,7 @@ async def list_sessions(
             "total_comments": s.total_comments,
             "total_credits": s.total_credits,
             "duration_ms": s.duration_ms,
+            "phase_filter": s.phase_filter,
         }
         for s in sessions
     ]
@@ -355,6 +380,7 @@ async def get_session(
         "model": session.model,
         "started_at": session.started_at.isoformat() if session.started_at else None,
         "status": session.status,
+        "phase_filter": session.phase_filter,
         "sources": list(sources_map.values()),
         "total_credits": session.total_credits,
         "total_duration_ms": session.duration_ms,

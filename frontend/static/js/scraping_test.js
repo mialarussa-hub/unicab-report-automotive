@@ -15,6 +15,13 @@ const STATUS_LABELS = {
     error: { label: 'Errore', class: 'status-error' },
 };
 
+const PHASE_BADGES = {
+    all: { label: 'Tutte le fasi', class: 'phase-all' },
+    L1: { label: 'L1 Ufficiale', class: 'phase-l1' },
+    L2: { label: 'L2 Media', class: 'phase-l2' },
+    L3: { label: 'L3 Utenti', class: 'phase-l3' },
+};
+
 let activePollInterval = null;
 let activeTimerInterval = null;
 let scrapeStartTime = null;
@@ -27,6 +34,7 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
 
     const brand = document.getElementById('brand').value.trim();
     const model = document.getElementById('model').value.trim();
+    const phase = document.getElementById('phase').value || 'all';
     if (!brand) return;
 
     const submitBtn = document.getElementById('submit-btn');
@@ -44,16 +52,20 @@ document.getElementById('scraping-form').addEventListener('submit', async (e) =>
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ brand, model }),
+            body: JSON.stringify({ brand, model, phase }),
         });
 
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok) {
+            let errMsg = `HTTP ${resp.status}`;
+            try { const err = await resp.json(); if (err.detail) errMsg = err.detail; } catch {}
+            throw new Error(errMsg);
+        }
         const data = await resp.json();
 
         if (data.status === 'running' && data.session_id) {
             // Async mode — show progress and start polling
             scrapeStartTime = Date.now();
-            renderProgressCard(data.sources_names || [], brand, model);
+            renderProgressCard(data.sources_names || [], brand, model, phase);
             startPolling(data.session_id);
         } else {
             // Legacy sync fallback
@@ -122,9 +134,10 @@ function stopPolling() {
 // Progress Card (shown during scraping)
 // ---------------------------------------------------------------------------
 
-function renderProgressCard(sourceNames, brand, model) {
+function renderProgressCard(sourceNames, brand, model, phase = 'all') {
     const container = document.getElementById('results');
     const label = `${brand}${model ? ' ' + model : ''}`;
+    const phaseBadge = PHASE_BADGES[phase] || PHASE_BADGES.all;
 
     container.innerHTML = `
         <div class="progress-card">
@@ -132,6 +145,7 @@ function renderProgressCard(sourceNames, brand, model) {
                 <div class="progress-title">
                     <span class="spinner-inline"></span>
                     Scraping <strong>${escapeHtml(label)}</strong>
+                    <span class="phase-badge ${phaseBadge.class}">${phaseBadge.label}</span>
                 </div>
                 <div class="progress-timer" id="progress-timer">0:00</div>
             </div>
@@ -243,9 +257,13 @@ async function loadSessions() {
 
             const el = document.createElement('div');
             el.className = 'session-item';
+            const phase = s.phase_filter || 'all';
+            const phaseBadge = PHASE_BADGES[phase] || PHASE_BADGES.all;
+
             el.innerHTML = `
                 <div class="session-info" onclick="loadSession('${s.id}')">
                     <strong>${statusIcon} ${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
+                    <span class="phase-badge ${phaseBadge.class}">${phaseBadge.label}</span>
                     <span class="session-date">${dateStr}</span>
                     <span class="session-stats">${s.total_results} risultati \u00B7 ${s.total_comments} commenti</span>
                 </div>
@@ -361,10 +379,12 @@ function renderResults(data, fromSession = false) {
         grouped[levelKey].push(source);
     }
 
-    // Render level sections
+    // Render level sections — skip levels not requested when a phase filter is active
     const brandName = data.brand || '';
+    const phaseFilter = data.phase_filter || 'all';
     resultsContainer.innerHTML = '';
     for (const level of LEVELS) {
+        if (phaseFilter !== 'all' && phaseFilter !== level.key) continue;
         const sources = grouped[level.key];
         if (sources.length === 0) continue;
 
