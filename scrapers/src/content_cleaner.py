@@ -3,6 +3,7 @@
 import os
 import logging
 import json
+import re
 
 import httpx
 
@@ -597,9 +598,11 @@ NON includere:
 - Tagli di cilindrata (1.0, 1.5 TSI, 2.0 TDI)
 - Nomi di modello o marca
 
-Restituisci SOLO un JSON array di stringhe in lowercase, URL-friendly (trattini al posto degli spazi). Esempio: ["pop", "icon", "la-prima", "red"]
-
-Se nessun allestimento è chiaramente identificabile, restituisci [].
+REGOLE DI FORMATO (fondamentali):
+- La tua risposta DEVE essere esclusivamente un JSON array di stringhe lowercase URL-friendly (trattini al posto degli spazi).
+- NESSUN testo prima o dopo l'array. Nessuna spiegazione. Nessun commento.
+- Esempio output valido: ["pop", "icon", "la-prima", "red"]
+- Se nessun allestimento e' chiaramente identificabile, rispondi con: []
 
 CONTENUTO:
 
@@ -633,7 +636,13 @@ CONTENUTO:
                 lines = text.split("\n")
                 text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
 
-        arr = json.loads(text)
+        # Robust JSON array extraction — Haiku sometimes appends explanatory text
+        # after the array (e.g. "[]\n\nNessun allestimento trovato.") which breaks
+        # json.loads with "Extra data" error. We extract the first top-level array.
+        arr = _extract_first_json_array(text)
+        if arr is None:
+            logger.warning(f"Trim slug: no JSON array parseable from response: {text[:200]!r}")
+            return []
         if not isinstance(arr, list):
             return []
         # Normalize: lowercase, strip, hyphenate spaces, drop empties and duplicates
@@ -651,3 +660,44 @@ CONTENUTO:
     except Exception as e:
         logger.warning(f"Trim slug discovery failed for {brand} {model}: {e}")
         return []
+
+
+def _extract_first_json_array(text: str):
+    """Extract the first top-level JSON array from text, tolerating trailing content.
+
+    Scans for '[' and walks characters tracking bracket depth + string/escape state
+    so nested arrays and bracket-like chars inside strings are handled correctly.
+    Returns parsed Python list, or None if not found / not parseable.
+    """
+    if not text:
+        return None
+    start = text.find("[")
+    if start < 0:
+        return None
+
+    depth = 0
+    in_str = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        return None
+    return None
