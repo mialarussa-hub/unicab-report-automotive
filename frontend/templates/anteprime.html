@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Anteprime — UNICAB{% endblock %}
+
+{% block content %}
+<div class="anteprime-page">
+    <h1>Anteprime</h1>
+    <p class="anteprime-intro">Sessioni di scraping selezionate per la revisione.</p>
+
+    <div id="featured-loading" class="featured-loading">Caricamento…</div>
+    <div id="featured-error" class="featured-error" style="display:none;"></div>
+    <div id="featured-empty" class="featured-empty" style="display:none;">Nessuna anteprima disponibile al momento.</div>
+
+    <div id="featured-list" class="featured-list"></div>
+</div>
+
+<script src="/frontend/static/js/scraping_render.js"></script>
+<script src="/frontend/static/js/anteprime.js"></script>
+{% endblock %}

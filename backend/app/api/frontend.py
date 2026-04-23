@@ -124,6 +124,15 @@ async def timesheet_page(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse(request, "timesheet.html", {"user": user})
 
 
+@router.get("/anteprime", response_class=HTMLResponse)
+async def anteprime_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """Read-only view of featured scraping sessions. Visible to admin + client."""
+    user = await _get_user_from_cookie(request, db)
+    if not user:
+        return RedirectResponse(url="/frontend/login")
+    return templates.TemplateResponse(request, "anteprime.html", {"user": user})
+
+
 @router.get("/logout")
 async def logout():
     response = RedirectResponse(url="/frontend/login")

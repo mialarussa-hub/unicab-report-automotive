@@ -571,6 +571,7 @@ async def list_sessions(
             "filter_alimentazione": s.filter_alimentazione,
             "filter_cilindrata": float(s.filter_cilindrata) if s.filter_cilindrata is not None else None,
             "filter_effective": s.filter_effective,
+            "is_featured": bool(s.is_featured),
         }
         for s in sessions
     ]
@@ -580,21 +581,32 @@ async def list_sessions(
 async def get_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_from_cookie),
+    current_user: User = Depends(get_user_from_cookie),
 ):
-    """Get session details with all results, formatted like scraper response."""
+    """Get session details with all results, formatted like scraper response.
+
+    Access rules:
+    - Admin can view any session they created.
+    - Client users (is_admin=False) can only view sessions flagged is_featured=True.
+      This lets Paolo & co. open the detail from the 'Anteprime' dashboard tab
+      without gaining access to the full admin test-scraping archive.
+    """
     result = await db.execute(
         select(ScrapingSession)
         .options(selectinload(ScrapingSession.results))
-        .where(
-            ScrapingSession.id == uuid.UUID(session_id),
-            ScrapingSession.created_by == current_user.id,
-        )
+        .where(ScrapingSession.id == uuid.UUID(session_id))
     )
     session = result.scalar_one_or_none()
 
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    if current_user.is_admin:
+        if session.created_by != current_user.id:
+            raise HTTPException(status_code=404, detail="Session not found")
+    else:
+        if not session.is_featured:
+            raise HTTPException(status_code=403, detail="Session not available for preview")
 
     # Resolve effective filter per phase (for tagging match flags)
     effective = session.filter_effective or {}
@@ -679,6 +691,7 @@ async def get_session(
         "filter_alimentazione": session.filter_alimentazione,
         "filter_cilindrata": float(session.filter_cilindrata) if session.filter_cilindrata is not None else None,
         "filter_effective": session.filter_effective,
+        "is_featured": bool(session.is_featured),
         "sources": list(sources_map.values()),
         "total_credits": session.total_credits,
         "total_duration_ms": session.duration_ms,
@@ -706,3 +719,66 @@ async def delete_session(
     await db.delete(session)
     await db.commit()
     return {"ok": True}
+
+
+@router.patch("/sessions/{session_id}/flag")
+async def toggle_session_flag(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_admin_from_cookie),
+):
+    """Toggle the 'featured for dashboard preview' flag on a session. Admin only.
+
+    Featured sessions show up in the /frontend/anteprime tab visible to all
+    authenticated users (including client-role like Paolo).
+    """
+    result = await db.execute(
+        select(ScrapingSession).where(
+            ScrapingSession.id == uuid.UUID(session_id),
+            ScrapingSession.created_by == current_user.id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.is_featured = not session.is_featured
+    await db.commit()
+    return {"ok": True, "is_featured": session.is_featured}
+
+
+@router.get("/featured")
+async def list_featured_sessions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_user_from_cookie),
+):
+    """List all sessions flagged as 'featured' — accessible to admin AND client.
+
+    Read-only: client users (e.g. Paolo) view the same summaries admins see on
+    /scraping-test but limited to the sessions the admin has explicitly flagged.
+    """
+    result = await db.execute(
+        select(ScrapingSession)
+        .where(ScrapingSession.is_featured == True)  # noqa: E712
+        .order_by(desc(ScrapingSession.started_at))
+    )
+    sessions = result.scalars().all()
+
+    return [
+        {
+            "id": str(s.id),
+            "brand": s.brand,
+            "model": s.model,
+            "started_at": s.started_at.isoformat() if s.started_at else None,
+            "status": s.status,
+            "total_sources": s.total_sources,
+            "total_results": s.total_results,
+            "total_comments": s.total_comments,
+            "duration_ms": s.duration_ms,
+            "phase_filter": s.phase_filter,
+            "filter_alimentazione": s.filter_alimentazione,
+            "filter_cilindrata": float(s.filter_cilindrata) if s.filter_cilindrata is not None else None,
+            "is_featured": True,
+        }
+        for s in sessions
+    ]

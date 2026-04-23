@@ -404,6 +404,10 @@ function renderSessionsPage() {
             ? `<span class="motore-badge">${escapeHtml(motoreFilter)}</span>`
             : '';
 
+        const flagClass = s.is_featured ? 'session-flag flagged' : 'session-flag';
+        const flagTitle = s.is_featured ? 'Rimuovi da Anteprime' : 'Mostra in Anteprime';
+        const flagIcon = s.is_featured ? '\u2605' : '\u2606';  // filled vs outline star
+
         el.innerHTML = `
             <div class="session-info" onclick="loadSession('${s.id}')">
                 <strong>${statusIcon} ${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
@@ -412,6 +416,7 @@ function renderSessionsPage() {
                 <span class="session-date">${dateStr}</span>
                 <span class="session-stats">${s.total_results} risultati \u00B7 ${s.total_comments} commenti</span>
             </div>
+            <button class="${flagClass}" onclick="toggleSessionFlag('${s.id}', event)" title="${flagTitle}">${flagIcon}</button>
             <button class="session-delete" onclick="deleteSession('${s.id}', event)" title="Elimina">\u2715</button>
         `;
         list.appendChild(el);
@@ -470,6 +475,27 @@ async function deleteSession(sessionId, event) {
         loadSessions();
     } catch (err) {
         console.error('Delete failed:', err);
+    }
+}
+
+async function toggleSessionFlag(sessionId, event) {
+    event.stopPropagation();
+    try {
+        const resp = await fetch(`/api/scraping-test/sessions/${sessionId}/flag`, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+        });
+        if (!resp.ok) {
+            console.error('Flag toggle failed:', resp.status);
+            return;
+        }
+        // Update local cache + re-render current page without a full refetch
+        const data = await resp.json();
+        const s = _sessionsCache.find(x => x.id === sessionId);
+        if (s) s.is_featured = data.is_featured;
+        renderSessionsPage();
+    } catch (err) {
+        console.error('Flag toggle failed:', err);
     }
 }
 

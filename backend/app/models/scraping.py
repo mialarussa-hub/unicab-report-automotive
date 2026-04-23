@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, Integer, Float, DateTime, ForeignKey, func, Numeric
+from sqlalchemy import String, Text, Integer, Float, DateTime, ForeignKey, func, Numeric, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,6 +31,9 @@ class ScrapingSession(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    # Flag: mark this session as "anteprima" visible to all authenticated users
+    # (admin + client) on the dashboard Anteprime tab. Toggled only by admin.
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     results: Mapped[list["ScrapingResult"]] = relationship(
