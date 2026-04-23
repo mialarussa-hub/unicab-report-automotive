@@ -639,6 +639,11 @@ REGOLE FONDAMENTALI:
 6. Se il pacchetto è povero di contenuto sostanziale, segnalalo in `note_metodologiche` e distribuisci i pesi con cautela.
 7. Restituisci SOLO il JSON, nessuna spiegazione, nessun markdown.
 
+REGOLE JSON (molto importanti — evitano output non parseabile):
+- Le claim_esemplificativi sono citazioni dal sito. Quando una citazione ha virgolette interne al testo originale, NON usare mai la virgoletta doppia ("): sostituisci con le virgolette italiane «...» oppure con l'apostrofo tipografico '. Esempio giusto: "Il SUV «compatto» per eccellenza". Esempio sbagliato: "Il SUV "compatto" per eccellenza" — questo rompe il JSON.
+- Non inserire mai caratteri di controllo (newline, tab) dentro una stringa JSON senza escape.
+- Prima di restituire, verifica mentalmente che ogni virgoletta doppia sia bilanciata e che il JSON sia un documento singolo valido.
+
 PACCHETTO CONTENUTI:
 
 {items_text}"""
@@ -673,11 +678,12 @@ async def analyze_communication_drivers(
     if len(items_text) > 60000:
         items_text = items_text[:60000] + "\n\n[... troncato]"
 
-    prompt = DRIVER_ANALYSIS_PROMPT.format(
+    base_prompt = DRIVER_ANALYSIS_PROMPT.format(
         brand=brand, model=model, items_text=items_text,
     )
 
-    try:
+    async def _call_and_parse(prompt_text: str, attempt_label: str) -> tuple[dict | None, str]:
+        """Call Claude + try to parse JSON. Returns (parsed_dict_or_None, raw_text)."""
         async with httpx.AsyncClient(timeout=180.0) as client:
             resp = await client.post(
                 ANTHROPIC_API_URL,
@@ -689,23 +695,57 @@ async def analyze_communication_drivers(
                 json={
                     "model": "claude-sonnet-4-20250514",
                     "max_tokens": 8192,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": prompt_text}],
                 },
             )
             if resp.status_code != 200:
-                logger.error(f"Claude driver-analysis API {resp.status_code}: {resp.text[:300]}")
-                return None
+                logger.error(
+                    f"Claude driver-analysis [{attempt_label}] API {resp.status_code}: "
+                    f"{resp.text[:300]}"
+                )
+                return None, ""
             data = resp.json()
-            text = ""
-            for block in data.get("content", []):
-                if block.get("type") == "text":
-                    text += block.get("text", "")
-            text = text.strip()
-            if text.startswith("```"):
-                lines = text.split("\n")
-                text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+        text = ""
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text += block.get("text", "")
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+        try:
+            return json.loads(text), text
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"Claude driver-analysis [{attempt_label}] JSON error: {e} "
+                f"| raw[0:400]={text[:400]!r}"
+            )
+            return None, text
 
-        result = json.loads(text)
+    try:
+        # Attempt 1 — base prompt
+        result, raw = await _call_and_parse(base_prompt, "attempt-1")
+
+        # Attempt 2 — retry with a reinforced instruction after a JSON failure.
+        # Commonly the model injects unescaped inner " quotes. We tell it to
+        # replace them with «...» or ' and re-emit the JSON.
+        if result is None:
+            retry_prompt = (
+                base_prompt
+                + "\n\n---\nRITENTATIVO: il tentativo precedente ha prodotto JSON malformato. "
+                "Rigenera l'output assicurandoti che NESSUNA stringa contenga virgolette doppie "
+                "non escapate. Dentro le claim_esemplificativi usa SEMPRE le virgolette italiane "
+                "«...» o l'apostrofo ' al posto della virgoletta doppia \"."
+                " Verifica che il JSON sia perfettamente parseabile prima di restituirlo."
+            )
+            result, raw = await _call_and_parse(retry_prompt, "attempt-2-retry")
+
+        if result is None:
+            logger.error(
+                f"Driver analysis failed for {brand} {model} after 2 attempts. "
+                f"Last raw response (truncated): {raw[:600]!r}"
+            )
+            return None
 
         ranking = result.get("ranking_driver") or []
         ranking = [d for d in ranking if isinstance(d, dict) and d.get("driver") in DRIVER_TAXONOMY]
@@ -736,9 +776,6 @@ async def analyze_communication_drivers(
         )
         return result
 
-    except json.JSONDecodeError as e:
-        logger.warning(f"Claude driver-analysis JSON error: {e}")
-        return None
     except Exception as e:
         logger.error(f"Claude driver-analysis error: {e}")
         return None
