@@ -61,7 +61,7 @@ BRAND_MODELS = {
     "Jeep": {
         "aliases": [],
         "official": {
-            "website": "https://www.jeep.it",
+            "website": "https://www.jeep-official.it",
             "youtube_channel_id": "UCDYMMHHRuxmYkCH_LHQZOHA",  # Jeep Italia
         },
         "models": {
@@ -195,7 +195,7 @@ BRAND_MODELS = {
     "Hyundai": {
         "aliases": [],
         "official": {
-            "website": "https://www.hyundai.it",
+            "website": "https://www.hyundai.com/it/it.html",
             "youtube_channel_id": "UCR9jCAml_JkZqPQ3K-bNXJQ",  # Hyundai Italia
         },
         "models": {
@@ -254,7 +254,7 @@ BRAND_MODELS = {
     "Skoda": {
         "aliases": ["Škoda"],
         "official": {
-            "website": "https://www.skoda.it",
+            "website": "https://www.skoda-auto.it",
             "youtube_channel_id": "UC1ULZdMcTyMJMv1Fj06YDnw",  # Škoda Italia
         },
         "models": {
@@ -270,7 +270,7 @@ BRAND_MODELS = {
     "Lancia": {
         "aliases": [],
         "official": {
-            "website": "https://www.lancia.com",
+            "website": "https://www.lancia.it",
             "youtube_channel_id": "UCZA5x3RNu3b57dX8fCBtyWg",  # Lancia
         },
         "models": {
@@ -413,7 +413,7 @@ BRAND_MODELS = {
     "Seat": {
         "aliases": ["SEAT"],
         "official": {
-            "website": "https://www.seat.it",
+            "website": "https://www.seat-italia.it",
             "youtube_channel_id": None,
         },
         "models": {
