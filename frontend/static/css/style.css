@@ -452,14 +452,99 @@ footer {
     margin-bottom: 1.5rem;
     background: #fff;
     border-radius: 8px;
-    padding: 1rem 1.2rem;
+    padding: 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow: hidden;
 }
 
 .sessions-panel h3 {
     margin: 0 0 0.8rem 0;
     font-size: 1rem;
     color: #333;
+}
+
+.sessions-panel > summary {
+    cursor: pointer;
+    padding: 0.85rem 1.2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #333;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.sessions-panel > summary::-webkit-details-marker { display: none; }
+
+.sessions-panel > summary:hover { background: #f8fafc; }
+
+.sessions-panel > summary::before {
+    content: '\25B8';
+    display: inline-block;
+    transition: transform 0.15s;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.sessions-panel[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.sessions-panel-count {
+    background: #e2e8f0;
+    color: #475569;
+    padding: 0.1rem 0.55rem;
+    border-radius: 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.sessions-panel > .sessions-list {
+    padding: 0 1.2rem;
+}
+
+.sessions-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.7rem 1.2rem 1rem;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+}
+
+.sessions-pagination:empty {
+    display: none;
+}
+
+.sessions-pagination .pag-btn {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    padding: 0.35rem 0.7rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.sessions-pagination .pag-btn:hover:not([disabled]) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.sessions-pagination .pag-btn[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.sessions-pagination .pag-info {
+    color: #64748b;
+    font-size: 0.82rem;
 }
 
 .sessions-list {

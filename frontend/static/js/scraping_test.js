@@ -342,59 +342,100 @@ function formatElapsed(seconds) {
 // Sessions
 // ---------------------------------------------------------------------------
 
+const SESSIONS_PER_PAGE = 10;
+let _sessionsCache = [];
+let _sessionsPage = 0;
+
 async function loadSessions() {
     try {
         const resp = await fetch('/api/scraping-test/sessions', { credentials: 'same-origin' });
         if (!resp.ok) return;
-        const sessions = await resp.json();
-
-        const panel = document.getElementById('sessions-panel');
-        const list = document.getElementById('sessions-list');
-
-        if (!sessions || sessions.length === 0) {
-            panel.style.display = 'none';
-            return;
-        }
-
-        panel.style.display = 'block';
-        list.innerHTML = '';
-
-        for (const s of sessions) {
-            const date = new Date(s.started_at);
-            const dateStr = date.toLocaleDateString('it-IT', {
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-            });
-
-            const statusIcon = s.status === 'completed' ? '\u2705' :
-                               s.status === 'running' ? '\uD83D\uDD04' :
-                               s.status === 'failed' ? '\u274C' :
-                               s.status === 'cancelled' ? '\uD83D\uDEAB' : '\u26AA';
-
-            const el = document.createElement('div');
-            el.className = 'session-item';
-            const phase = s.phase_filter || 'all';
-            const phaseBadge = PHASE_BADGES[phase] || PHASE_BADGES.all;
-            const motoreFilter = formatMotoreFilter(s.filter_alimentazione, s.filter_cilindrata);
-            const motoreBadge = motoreFilter
-                ? `<span class="motore-badge">${escapeHtml(motoreFilter)}</span>`
-                : '';
-
-            el.innerHTML = `
-                <div class="session-info" onclick="loadSession('${s.id}')">
-                    <strong>${statusIcon} ${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
-                    <span class="phase-badge ${phaseBadge.class}">${phaseBadge.label}</span>
-                    ${motoreBadge}
-                    <span class="session-date">${dateStr}</span>
-                    <span class="session-stats">${s.total_results} risultati \u00B7 ${s.total_comments} commenti</span>
-                </div>
-                <button class="session-delete" onclick="deleteSession('${s.id}', event)" title="Elimina">\u2715</button>
-            `;
-            list.appendChild(el);
-        }
+        _sessionsCache = await resp.json();
+        _sessionsPage = 0;
+        renderSessionsPage();
     } catch (err) {
         console.error('Failed to load sessions:', err);
     }
+}
+
+function renderSessionsPage() {
+    const panel = document.getElementById('sessions-panel');
+    const list = document.getElementById('sessions-list');
+    const countEl = document.getElementById('sessions-count');
+    const pagEl = document.getElementById('sessions-pagination');
+
+    const sessions = _sessionsCache || [];
+
+    if (sessions.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(sessions.length / SESSIONS_PER_PAGE));
+    if (_sessionsPage >= totalPages) _sessionsPage = totalPages - 1;
+    if (_sessionsPage < 0) _sessionsPage = 0;
+
+    panel.style.display = 'block';
+    if (countEl) countEl.textContent = `${sessions.length}`;
+
+    const start = _sessionsPage * SESSIONS_PER_PAGE;
+    const end = Math.min(start + SESSIONS_PER_PAGE, sessions.length);
+    const pageSlice = sessions.slice(start, end);
+
+    list.innerHTML = '';
+    for (const s of pageSlice) {
+        const date = new Date(s.started_at);
+        const dateStr = date.toLocaleDateString('it-IT', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+
+        const statusIcon = s.status === 'completed' ? '\u2705' :
+                           s.status === 'running' ? '\uD83D\uDD04' :
+                           s.status === 'failed' ? '\u274C' :
+                           s.status === 'cancelled' ? '\uD83D\uDEAB' : '\u26AA';
+
+        const el = document.createElement('div');
+        el.className = 'session-item';
+        const phase = s.phase_filter || 'all';
+        const phaseBadge = PHASE_BADGES[phase] || PHASE_BADGES.all;
+        const motoreFilter = formatMotoreFilter(s.filter_alimentazione, s.filter_cilindrata);
+        const motoreBadge = motoreFilter
+            ? `<span class="motore-badge">${escapeHtml(motoreFilter)}</span>`
+            : '';
+
+        el.innerHTML = `
+            <div class="session-info" onclick="loadSession('${s.id}')">
+                <strong>${statusIcon} ${escapeHtml(s.brand)}${s.model ? ' ' + escapeHtml(s.model) : ''}</strong>
+                <span class="phase-badge ${phaseBadge.class}">${phaseBadge.label}</span>
+                ${motoreBadge}
+                <span class="session-date">${dateStr}</span>
+                <span class="session-stats">${s.total_results} risultati \u00B7 ${s.total_comments} commenti</span>
+            </div>
+            <button class="session-delete" onclick="deleteSession('${s.id}', event)" title="Elimina">\u2715</button>
+        `;
+        list.appendChild(el);
+    }
+
+    // Pagination controls
+    if (pagEl) {
+        if (totalPages <= 1) {
+            pagEl.innerHTML = '';
+        } else {
+            const prevDisabled = _sessionsPage === 0 ? 'disabled' : '';
+            const nextDisabled = _sessionsPage >= totalPages - 1 ? 'disabled' : '';
+            pagEl.innerHTML = `
+                <button class="pag-btn" ${prevDisabled} onclick="gotoSessionsPage(${_sessionsPage - 1})">\u2039 Precedenti</button>
+                <span class="pag-info">Pagina ${_sessionsPage + 1} di ${totalPages} \u00B7 mostra ${start + 1}\u2013${end} di ${sessions.length}</span>
+                <button class="pag-btn" ${nextDisabled} onclick="gotoSessionsPage(${_sessionsPage + 1})">Successive \u203A</button>
+            `;
+        }
+    }
+}
+
+function gotoSessionsPage(page) {
+    _sessionsPage = page;
+    renderSessionsPage();
 }
 
 async function loadSession(sessionId) {
