@@ -575,6 +575,175 @@ async def aggregate_official_content(
         return None
 
 
+# ---------------------------------------------------------------------------
+# L1: Communication drivers analysis — positioning / messaging, NOT technical specs
+# ---------------------------------------------------------------------------
+
+DRIVER_TAXONOMY = {
+    "design_linea": "Design & Linea",
+    "prezzo_accessibilita": "Prezzo & Accessibilità",
+    "tecnologia_innovazione": "Tecnologia & Innovazione",
+    "sicurezza_adas": "Sicurezza & ADAS",
+    "consumi_sostenibilita": "Consumi & Sostenibilità",
+    "prestazioni_guida": "Prestazioni & Piacere di guida",
+    "spazio_praticita": "Spazio & Praticità",
+    "heritage_identita": "Heritage & Identità brand",
+    "lifestyle_emozione": "Lifestyle & Emozione",
+}
+
+DRIVER_ANALYSIS_PROMPT = """Sei un analista di comunicazione di marketing automotive.
+
+Ricevi un pacchetto di contenuti UFFICIALI (sito del costruttore, canale YouTube ufficiale, sintesi consolidata Perplexity con citazioni dealer/listini) su {brand} {model}.
+
+COMPITO: identificare su quali DRIVER COMUNICATIVI il brand punta per questo modello.
+NON estrarre specifiche tecniche (prezzi, motorizzazioni, dimensioni, dotazione): quelle sono trattate separatamente.
+Focalizzati su COSA IL BRAND ENFATIZZA nella sua narrazione: messaggi, claim, tagline, angolo emotivo, target comunicato.
+
+TASSONOMIA DRIVER (usa ESATTAMENTE questi 9 codici, nessun altro):
+- design_linea: estetica, stile esterno/interno, linguaggio formale, personalizzazione estetica
+- prezzo_accessibilita: pricing, finanziamenti, promo, accessibilità economica, value for money
+- tecnologia_innovazione: infotainment, connettività, feature tech distintive, soluzioni proprietarie
+- sicurezza_adas: sistemi di assistenza alla guida, protezione, crash rating
+- consumi_sostenibilita: efficienza, emissioni, elettrificazione, materiali sostenibili, eco
+- prestazioni_guida: dinamica, potenza, handling, piacere di guida
+- spazio_praticita: abitabilità, baule, modularità, famiglia/quotidiano
+- heritage_identita: storia, DNA del brand, tradizione, Made in, appartenenza
+- lifestyle_emozione: target aspirazionale, stile di vita, emozioni evocate, narrazione lifestyle
+
+OUTPUT (restituisci ESATTAMENTE questa struttura, UN solo oggetto JSON):
+
+{{
+  "is_driver_analysis": true,
+  "brand": "{brand}",
+  "model": "{model}",
+  "ranking_driver": [
+    {{
+      "driver": "design_linea",
+      "peso": 28,
+      "claim_esemplificativi": ["quote testuale 1 dal contenuto", "quote testuale 2"],
+      "canali": ["sito_brand", "youtube", "perplexity"],
+      "evidenze": "1-2 frasi di sintesi che spiegano cosa il brand enfatizza su questo driver"
+    }}
+  ],
+  "tagline_campagna": "payoff/slogan ufficiale se identificabile, null altrimenti",
+  "target_comunicato": "es. famiglie urbane, giovani, professionisti — null se non chiaro",
+  "note_metodologiche": "limitazioni o fonti carenti (es. 'contenuto YouTube limitato', 'sito brand con poche descrizioni')"
+}}
+
+REGOLE FONDAMENTALI:
+1. I `peso` sono numeri interi e DEVONO sommare esattamente a 100 complessivamente.
+2. Includi TUTTI i 9 driver nel ranking, anche con peso=0: in tal caso `claim_esemplificativi=[]`, `canali=[]`, `evidenze="non presente nella comunicazione analizzata"`.
+3. `claim_esemplificativi`: quote TESTUALI dal contenuto, MAI parafrasate o inventate. Max 5 per driver. Se non ci sono quote appropriate, lista vuota.
+4. `canali`: metti SOLO i canali in cui il driver emerge davvero (sito_brand, youtube, perplexity). Lista vuota se peso=0.
+5. NON estrarre né strutturare dati tecnici (prezzi, CV, dimensioni, dotazione). Anche se il contenuto ne parla, il tuo output è puramente sul POSIZIONAMENTO comunicativo.
+6. Se il pacchetto è povero di contenuto sostanziale, segnalalo in `note_metodologiche` e distribuisci i pesi con cautela.
+7. Restituisci SOLO il JSON, nessuna spiegazione, nessun markdown.
+
+PACCHETTO CONTENUTI:
+
+{items_text}"""
+
+
+async def analyze_communication_drivers(
+    items: list[dict], brand: str, model: str,
+) -> dict | None:
+    """Classify which communication drivers the brand emphasizes for the model.
+
+    Replaces the technical-specs aggregate: runs ONE call across all L1 items and
+    returns the 9-driver ranking with exemplary quotes, tagline and target — the
+    positioning-focused L1 output requested for the UNICAB pilot.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key or not items:
+        return None
+
+    parts = []
+    for i, item in enumerate(items):
+        title = item.get("title", "Senza titolo")
+        url = item.get("url", "")
+        content = item.get("content", "")[:6000]
+        if item.get("perplexity_consolidated"):
+            origin = "Perplexity (consolidato)"
+        elif "youtube.com" in (url or "") or item.get("video_id"):
+            origin = "YouTube ufficiale"
+        else:
+            origin = "Sito ufficiale"
+        parts.append(f"[{i+1}] ({origin}) Titolo: {title}\nURL: {url}\n\n{content}")
+    items_text = "\n\n===\n\n".join(parts)
+    if len(items_text) > 60000:
+        items_text = items_text[:60000] + "\n\n[... troncato]"
+
+    prompt = DRIVER_ANALYSIS_PROMPT.format(
+        brand=brand, model=model, items_text=items_text,
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 8192,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            if resp.status_code != 200:
+                logger.error(f"Claude driver-analysis API {resp.status_code}: {resp.text[:300]}")
+                return None
+            data = resp.json()
+            text = ""
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    text += block.get("text", "")
+            text = text.strip()
+            if text.startswith("```"):
+                lines = text.split("\n")
+                text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+
+        result = json.loads(text)
+
+        ranking = result.get("ranking_driver") or []
+        ranking = [d for d in ranking if isinstance(d, dict) and d.get("driver") in DRIVER_TAXONOMY]
+        for d in ranking:
+            try:
+                d["peso"] = max(0, int(d.get("peso") or 0))
+            except (TypeError, ValueError):
+                d["peso"] = 0
+
+        # Renormalize pesi to exactly 100 when the model drifts
+        total = sum(d["peso"] for d in ranking)
+        if total > 0 and total != 100:
+            for d in ranking:
+                d["peso"] = round((d["peso"] / total) * 100)
+            # correct rounding drift on the largest bucket
+            drift = 100 - sum(d["peso"] for d in ranking)
+            if drift != 0 and ranking:
+                ranking.sort(key=lambda d: -d["peso"])
+                ranking[0]["peso"] += drift
+
+        ranking.sort(key=lambda d: -d["peso"])
+        result["ranking_driver"] = ranking
+
+        top = ranking[0]["driver"] if ranking else "N/A"
+        logger.warning(
+            f"Driver analysis L1 for {brand} {model}: "
+            f"{len(ranking)} driver classificati, top={top}"
+        )
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"Claude driver-analysis JSON error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Claude driver-analysis error: {e}")
+        return None
+
+
 async def discover_trim_slugs(content: str, brand: str, model: str) -> list[str]:
     """Mini-call to Claude Haiku: identify trim/allestimento slugs from the model page.
 

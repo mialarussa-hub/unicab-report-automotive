@@ -1,6 +1,7 @@
 """Scraping test orchestrator — 3-step: search → scrape → clean with AI."""
 
 import asyncio
+import os
 import re
 import time
 import logging
@@ -1044,24 +1045,34 @@ async def _scrape_official_source(
     pplx_items = await _scrape_official_perplexity(brand, model, name, alimentazione, cilindrata)
     all_items.extend(pplx_items)
 
-    # D) Aggregate analysis — ONE rich consolidated JSON across ALL sources
-    # (direct scrapes + Perplexity answer). Produces the contract schema.
-    aggregate_items = [it for it in all_items if not it.get("perplexity_citation")]
-    aggregate = None
-    if aggregate_items:
-        from src.content_cleaner import aggregate_official_content
-        aggregate = await aggregate_official_content(
-            aggregate_items, brand, model, alimentazione, cilindrata,
-        )
+    # D) L1 Driver analysis — ONE consolidated positioning JSON across ALL sources
+    # (direct scrapes + Perplexity answer). Output: 9-driver ranking + quotes + tagline.
+    # Replaces the legacy technical-specs aggregate (see L1_LEGACY_AGGREGATE flag below).
+    driver_items = [it for it in all_items if not it.get("perplexity_citation")]
+    driver_result = None
+    if driver_items:
+        from src.content_cleaner import analyze_communication_drivers
+        driver_result = await analyze_communication_drivers(driver_items, brand, model)
 
-    # Attach aggregate to the consolidated Perplexity item (if present),
+    # Legacy tech-specs aggregate — DISABLED for Phase A pilot (Paolo's feedback: specs
+    # are already sourced from Quattroruote). Kept here, gated by env flag, so we can
+    # reactivate quickly without code archaeology if the scope changes.
+    if os.environ.get("L1_LEGACY_AGGREGATE") == "1" and driver_items:
+        from src.content_cleaner import aggregate_official_content
+        legacy_aggregate = await aggregate_official_content(
+            driver_items, brand, model, alimentazione, cilindrata,
+        )
+    else:
+        legacy_aggregate = None
+
+    # Attach driver analysis to the consolidated Perplexity item (if present),
     # otherwise synthesize one so the UI always has a featured card.
-    if aggregate:
+    if driver_result:
         target = next((it for it in all_items if it.get("perplexity_consolidated")), None)
         if target is None:
             target = {
-                "url": "aggregate://l1-consolidated",
-                "title": f"{brand} {model} — Scheda consolidata ufficiale",
+                "url": "driver-analysis://l1-consolidated",
+                "title": f"{brand} {model} — Driver comunicativi ufficiali",
                 "content": "",
                 "source_type": "official",
                 "scraped": True,
@@ -1070,30 +1081,36 @@ async def _scrape_official_source(
             }
             all_items.insert(0, target)
 
-        aggregate["fonte_consolidata"] = True
-        aggregate["fonti_citate"] = target.get("perplexity_citations", [])
-        target["ai_official_info"] = aggregate
+        driver_result["fonte_consolidata"] = True
+        driver_result["fonti_citate"] = target.get("perplexity_citations", [])
+        # Re-use the existing `ai_official_info` JSONB slot (no DB migration needed).
+        # The UI distinguishes by the `is_driver_analysis` flag inside the payload.
+        target["ai_official_info"] = driver_result
 
-        # Build a unified motore_info from the aggregate's motorizzazioni list
-        motori = aggregate.get("motorizzazioni") or []
-        versioni = []
-        for m in motori:
-            if not isinstance(m, dict):
-                continue
-            a = m.get("alimentazione")
-            c = m.get("cilindrata_l")
-            if a or c is not None:
-                versioni.append({
-                    "alimentazione": a,
-                    "cilindrata": c,
-                    "descrizione": m.get("nome_commerciale"),
-                })
-        if versioni:
-            target["motore_info"] = {"versioni": versioni}
-            # Propagate to citation items so the filter cascade shows them
-            for it in all_items:
-                if it.get("perplexity_citation"):
-                    it["motore_info"] = target["motore_info"]
+    if legacy_aggregate:
+        target = next((it for it in all_items if it.get("perplexity_consolidated")), None)
+        if target is not None:
+            legacy_aggregate["fonte_consolidata"] = True
+            legacy_aggregate["fonti_citate"] = target.get("perplexity_citations", [])
+            target["ai_official_info"] = legacy_aggregate
+            motori = legacy_aggregate.get("motorizzazioni") or []
+            versioni = []
+            for m in motori:
+                if not isinstance(m, dict):
+                    continue
+                a = m.get("alimentazione")
+                c = m.get("cilindrata_l")
+                if a or c is not None:
+                    versioni.append({
+                        "alimentazione": a,
+                        "cilindrata": c,
+                        "descrizione": m.get("nome_commerciale"),
+                    })
+            if versioni:
+                target["motore_info"] = {"versioni": versioni}
+                for it in all_items:
+                    if it.get("perplexity_citation"):
+                        it["motore_info"] = target["motore_info"]
 
     return SourceResult(
         source=name, source_type="official", status="ok" if all_items else "partial",

@@ -964,8 +964,122 @@ function renderAiComments(comments) {
     return html;
 }
 
+const DRIVER_LABELS = {
+    design_linea: 'Design & Linea',
+    prezzo_accessibilita: 'Prezzo & Accessibilità',
+    tecnologia_innovazione: 'Tecnologia & Innovazione',
+    sicurezza_adas: 'Sicurezza & ADAS',
+    consumi_sostenibilita: 'Consumi & Sostenibilità',
+    prestazioni_guida: 'Prestazioni & Piacere di guida',
+    spazio_praticita: 'Spazio & Praticità',
+    heritage_identita: 'Heritage & Identità brand',
+    lifestyle_emozione: 'Lifestyle & Emozione',
+};
+
+const CANALE_LABELS = {
+    sito_brand: 'sito brand',
+    youtube: 'YouTube',
+    perplexity: 'Perplexity',
+};
+
+function renderDriverAnalysis(info) {
+    let html = '<div class="official-info driver-analysis">';
+
+    html += `<div class="agg-top">
+        <span class="agg-badge">L1 Driver comunicativi ufficiali</span>
+        ${info.target_comunicato ? `<span class="agg-tono">Target: ${escapeHtml(info.target_comunicato)}</span>` : ''}
+    </div>`;
+
+    if (info.tagline_campagna) {
+        html += `<div class="official-claim">&laquo;${escapeHtml(info.tagline_campagna)}&raquo;</div>`;
+    }
+
+    const ranking = Array.isArray(info.ranking_driver) ? info.ranking_driver : [];
+    const active = ranking.filter(d => (d.peso || 0) > 0);
+    const maxPeso = active.reduce((m, d) => Math.max(m, d.peso || 0), 0) || 1;
+
+    if (active.length > 0) {
+        html += `<div class="driver-chart">`;
+        for (const d of active) {
+            const label = DRIVER_LABELS[d.driver] || d.driver;
+            const pct = Math.max(2, Math.round((d.peso / maxPeso) * 100));
+            html += `
+                <div class="driver-row">
+                    <div class="driver-row-label"><strong>${escapeHtml(label)}</strong><span class="driver-row-peso">${d.peso}%</span></div>
+                    <div class="driver-row-bar"><div class="driver-row-fill" style="width:${pct}%"></div></div>
+                </div>`;
+        }
+        html += `</div>`;
+    }
+
+    // Per-driver detail cards
+    if (active.length > 0) {
+        html += `<div class="driver-details">`;
+        for (const d of active) {
+            const label = DRIVER_LABELS[d.driver] || d.driver;
+            const claims = Array.isArray(d.claim_esemplificativi) ? d.claim_esemplificativi : [];
+            const canali = Array.isArray(d.canali) ? d.canali : [];
+            html += `<div class="driver-card">
+                <div class="driver-card-header">
+                    <strong>${escapeHtml(label)}</strong>
+                    <span class="driver-card-peso">${d.peso}%</span>
+                </div>`;
+            if (d.evidenze) {
+                html += `<div class="driver-card-evidence">${escapeHtml(d.evidenze)}</div>`;
+            }
+            if (claims.length > 0) {
+                html += `<ul class="driver-card-claims">`;
+                for (const c of claims) {
+                    html += `<li>&laquo;${escapeHtml(c)}&raquo;</li>`;
+                }
+                html += `</ul>`;
+            }
+            if (canali.length > 0) {
+                const labels = canali.map(x => CANALE_LABELS[x] || x).join(', ');
+                html += `<div class="driver-card-canali">Canali: ${escapeHtml(labels)}</div>`;
+            }
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+
+    // Drivers not used (peso=0) — compact
+    const inactive = ranking.filter(d => !((d.peso || 0) > 0));
+    if (inactive.length > 0) {
+        const names = inactive.map(d => DRIVER_LABELS[d.driver] || d.driver).join(', ');
+        html += `<div class="driver-inactive"><em>Driver non comunicati:</em> ${escapeHtml(names)}</div>`;
+    }
+
+    if (info.note_metodologiche) {
+        html += `<details class="driver-notes">
+            <summary>Note metodologiche</summary>
+            <div>${escapeHtml(info.note_metodologiche)}</div>
+        </details>`;
+    }
+
+    // Sources row (Perplexity citations)
+    const fonti = Array.isArray(info.fonti_citate) ? info.fonti_citate : [];
+    if (fonti.length > 0) {
+        html += `<details class="driver-sources">
+            <summary>Fonti citate (${fonti.length})</summary>
+            <ul>`;
+        for (const f of fonti) {
+            const t = f.title || f.url;
+            html += `<li><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(t)}</a></li>`;
+        }
+        html += `</ul></details>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
 function renderOfficialInfo(info) {
-    // If this is the aggregate consolidated card, use the rich contract renderer
+    // Phase A pilot: communication drivers analysis replaces the tech-specs aggregate
+    if (info.is_driver_analysis) {
+        return renderDriverAnalysis(info);
+    }
+    // Legacy tech-specs aggregate (disabled by default — see L1_LEGACY_AGGREGATE flag)
     if (info.is_aggregate) {
         return renderAggregateOfficial(info);
     }
