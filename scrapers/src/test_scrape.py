@@ -1147,27 +1147,39 @@ async def _scrape_official_perplexity(
         variant_parts.append(ALIMENTAZIONE_LABEL_IT.get(alimentazione, alimentazione))
     variant_suffix = f" {' '.join(variant_parts)}" if variant_parts else ""
 
+    # Build a domain hint for the system prompt — helps Perplexity stay on-brand
+    from src.auto_brands import get_official_domains, is_official_domain
+    brand_domains = get_official_domains(brand)
+    domain_hint = ", ".join(brand_domains) if brand_domains else "sito web ufficiale del costruttore"
+
     system = (
-        "Sei un analista di dati ufficiali del mercato auto italiano. "
-        "Rispondi SOLO con dati ufficiali dichiarati dal costruttore (sito ufficiale, "
-        "listini, comunicati stampa, schede tecniche diffuse dalla rete dealer ufficiale). "
-        "Escludi opinioni, recensioni di magazine, commenti utenti. "
-        "Se un dato non è disponibile pubblicamente, dichiaralo esplicitamente."
+        "Sei un analista della comunicazione ufficiale di brand automotive italiani. "
+        f"Rispondi ESCLUSIVAMENTE con contenuti provenienti dai CANALI UFFICIALI del brand {brand} "
+        f"(sito web ufficiale: {domain_hint}; comunicati stampa del brand; canale YouTube e social "
+        "ufficiali del costruttore; materiale pubblicitario del brand). "
+        "NON includere, NON citare, NON considerare: rete dealer/concessionari/rivenditori, "
+        "portali multi-brand (es. automoto.it, automobile.it, tuo-auto.it, autoscout24, subito.it), "
+        "riviste di settore (Quattroruote, AlVolante, Motor1, AutoExpress), blog/forum indipendenti, "
+        "listini di terzi. "
+        "Il tuo scopo è descrivere COME IL BRAND COMUNICA il modello sui suoi canali, non raccogliere "
+        "dati di mercato. Se un'informazione non è presente sui canali ufficiali, dichiaralo esplicitamente."
     )
 
     user = (
-        f"Estrai tutti i dati ufficiali dichiarati da {brand} per il modello "
-        f"{brand} {model}{variant_suffix}.\n\n"
-        "Includi per ogni versione/allestimento citato:\n"
-        "- Prezzo di listino chiavi in mano (EUR) e note (incentivi inclusi/esclusi, IPT, ecc.)\n"
-        "- Motore: cilindrata in cc e in litri, CV / kW, coppia (Nm), cilindri, alimentazione, cambio\n"
-        "- Consumi WLTP (l/100km o kWh/100km) ed emissioni CO2 (g/km)\n"
-        "- Dotazione principale (ADAS, infotainment, comfort)\n"
-        "- Dimensioni (lunghezza, larghezza, altezza, passo, peso, bagagliaio)\n"
-        "- Garanzia ufficiale (anni / km)\n"
-        "- Promozioni finanziarie attive dichiarate dal costruttore (rata, durata, anticipo, scadenza)\n"
-        "- Allestimenti/versioni disponibili\n\n"
-        "Cita sempre le fonti. Distingui i dati della versione richiesta dai dati di gamma."
+        f"Analizza la comunicazione UFFICIALE di {brand} per il modello {brand} {model}{variant_suffix}. "
+        "Riporta ESCLUSIVAMENTE ciò che il brand comunica sui propri canali proprietari "
+        "(sito, comunicati stampa, social ufficiali, advertising del brand).\n\n"
+        "Concentrati sul POSIZIONAMENTO e sul MESSAGGIO:\n"
+        "- Claim, payoff e tagline ufficiali\n"
+        "- Su quali driver il brand insiste: design/linea, prezzo/accessibilità, tecnologia/innovazione, "
+        "sicurezza/ADAS, consumi/sostenibilità, prestazioni/piacere di guida, spazio/praticità, "
+        "heritage/identità, lifestyle/emozione\n"
+        "- Target comunicato (a chi si rivolge il brand)\n"
+        "- Tono, atmosfera, narrazione\n"
+        "- Key selling points che il brand enfatizza\n\n"
+        "NON concentrarti su: prezzi di mercato, promozioni di dealer, recensioni di riviste, "
+        "opinioni di giornalisti, commenti utente, schede tecniche redazionali. "
+        "Cita solo fonti brand-owned."
     )
 
     resp = await client.ask(query=user, system_prompt=system, recency="year")
@@ -1180,25 +1192,42 @@ async def _scrape_official_perplexity(
         logger.warning(f"[{source_name}] Perplexity L1 returned empty answer")
         return []
 
-    # Build one consolidated item carrying the answer as content, citations as metadata
+    # Post-filter citations: keep ONLY brand-owned domains (Paolo's Phase A perimeter).
+    # Dealer chains, multi-brand portals, trade magazines get stripped here even if the
+    # model ignored the system prompt — defense in depth.
+    all_citations = list(resp.citations)
+    kept_citations = [c for c in all_citations if is_official_domain(c.url, brand)]
+    dropped_count = len(all_citations) - len(kept_citations)
+    if dropped_count > 0:
+        dropped_hosts = sorted({(c.url or "").split("/")[2] for c in all_citations if not is_official_domain(c.url, brand)})
+        logger.warning(
+            f"[{source_name}] Perplexity L1: filtered {dropped_count}/{len(all_citations)} "
+            f"non-official citations. Dropped hosts: {dropped_hosts[:10]}"
+        )
+
     citations_list = [
         {"url": c.url, "title": c.title, "snippet": c.snippet}
-        for c in resp.citations
+        for c in kept_citations
     ]
-    # Use top citation URL as canonical URL for the item, fallback to a marker
-    top_url = resp.citations[0].url if resp.citations else "perplexity://consolidated"
+    # Use top kept citation as canonical URL, fallback to brand website or marker
+    if kept_citations:
+        top_url = kept_citations[0].url
+    elif brand_domains:
+        top_url = f"https://{brand_domains[0]}"
+    else:
+        top_url = "perplexity://consolidated"
     title_suffix = f" ({variant_suffix.strip()})" if variant_suffix else ""
 
-    # Embed citations inline at the end of content so Claude sees them during extraction
+    # Embed (filtered) citations inline at the end of content so Claude sees them during extraction
     citations_text = ""
     if citations_list:
-        citations_text = "\n\n--- Fonti citate ---\n" + "\n".join(
+        citations_text = "\n\n--- Fonti ufficiali citate ---\n" + "\n".join(
             f"- {c['title'] or c['url']}: {c['url']}" for c in citations_list
         )
 
     logger.warning(
         f"[{source_name}] Perplexity L1 returned {len(resp.answer)} chars, "
-        f"{len(citations_list)} citations"
+        f"{len(citations_list)} official citations (dropped {dropped_count})"
     )
 
     items: list[dict] = []

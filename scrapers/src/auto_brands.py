@@ -525,3 +525,63 @@ def _find_brand(brand: str) -> tuple[dict | None, str | None]:
             return data, key
 
     return None, None
+
+
+def get_official_domains(brand: str) -> list[str]:
+    """Registry of domains considered 'brand-owned' for L1 filtering.
+
+    Derived from the official website host of the brand + any explicit overrides
+    declared in BRAND_MODELS[brand]["official_domains"]. Used to filter out dealer
+    chains, multi-brand portals, trade magazines from L1 Perplexity citations —
+    Paolo's Phase A perimeter is strictly brand-owned channels.
+    """
+    from urllib.parse import urlparse
+
+    entry, _ = _find_brand(brand)
+    if not entry:
+        return []
+
+    domains: list[str] = []
+    for d in (entry.get("official_domains") or []):
+        if d:
+            domains.append(d.strip().lower())
+
+    website = (entry.get("official") or {}).get("website") or ""
+    if website:
+        try:
+            host = urlparse(website).netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+            if host:
+                domains.append(host)
+        except Exception:
+            pass
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for d in domains:
+        if d and d not in seen:
+            seen.add(d)
+            out.append(d)
+    return out
+
+
+def is_official_domain(url: str, brand: str) -> bool:
+    """True if url's host matches one of the brand's official domains (or subdomain)."""
+    from urllib.parse import urlparse
+
+    if not url:
+        return False
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        return False
+    if host.startswith("www."):
+        host = host[4:]
+    if not host:
+        return False
+
+    for d in get_official_domains(brand):
+        if host == d or host.endswith("." + d):
+            return True
+    return False
