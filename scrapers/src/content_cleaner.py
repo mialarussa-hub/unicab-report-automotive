@@ -627,7 +627,7 @@ OUTPUT (restituisci ESATTAMENTE questa struttura, UN solo oggetto JSON):
   ],
   "tagline_campagna": "payoff/slogan ufficiale se identificabile, null altrimenti",
   "target_comunicato": "es. famiglie urbane, giovani, professionisti — null se non chiaro",
-  "note_metodologiche": "limitazioni o fonti carenti (es. 'contenuto YouTube limitato', 'sito brand con poche descrizioni')"
+  "note_metodologiche": "limitazioni relative ai contenuti PRESENTI nel pacchetto (es. 'sito brand con molte schede tecniche e poco storytelling') — NON menzionare canali non presenti come mancanze"
 }}
 
 REGOLE FONDAMENTALI:
@@ -636,7 +636,7 @@ REGOLE FONDAMENTALI:
 3. `claim_esemplificativi`: quote TESTUALI dal contenuto, MAI parafrasate o inventate. Max 5 per driver. Se non ci sono quote appropriate, lista vuota.
 4. `canali`: metti SOLO i canali in cui il driver emerge davvero (sito_brand, youtube, perplexity). Lista vuota se peso=0.
 5. NON estrarre né strutturare dati tecnici (prezzi, CV, dimensioni, dotazione). Anche se il contenuto ne parla, il tuo output è puramente sul POSIZIONAMENTO comunicativo.
-6. Se il pacchetto è povero di contenuto sostanziale, segnalalo in `note_metodologiche` e distribuisci i pesi con cautela.
+6. Se il pacchetto è povero di contenuto sostanziale, segnalalo in `note_metodologiche` e distribuisci i pesi con cautela. NON parlare di canali/fonti non presenti nel pacchetto come fossero "mancanze": le fonti sono quelle che trovi qui, non commentare l'assenza di altri canali (YouTube, social, ecc.) se non sono tra gli item forniti.
 7. Restituisci SOLO il JSON, nessuna spiegazione, nessun markdown.
 
 REGOLE JSON (molto importanti — evitano output non parseabile):
