@@ -324,7 +324,7 @@ BRAND_MODELS = {
     "EVO": {
         "aliases": ["Evo"],
         "official": {
-            "website": "https://www.evo-automobile.com",
+            "website": "https://www.auto-evo.com",
             "youtube_channel_id": None,  # No dedicated YouTube channel found
         },
         "models": {
