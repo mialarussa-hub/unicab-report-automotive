@@ -92,7 +92,17 @@ def _motori_match(motore_info, want_alim, want_cil):
 
 
 def _item_matches(r, want_alim, want_cil):
-    """An L1/L2/L3-thread-level item matches if its motore_info has a matching versione."""
+    """An L1/L2/L3-thread-level item matches if its motore_info has a matching versione.
+
+    Special case for L1 (source_type='official'): the driver analysis runs at
+    MODEL level, not at version level — the alim/cil filter there is semantically
+    off-scope. We consider L1 official items always matching so the cascade does
+    not hide pages the driver analysis has already consumed.
+    """
+    if not want_alim and want_cil is None:
+        return True
+    if r.source_type == "official":
+        return True
     return _motori_match(r.motore_info, want_alim, want_cil)
 
 
@@ -625,8 +635,17 @@ async def get_session(
         if phase == "L3" and tagged_comments:
             item_matches = item_matches or any(c.get("matches_filter") for c in tagged_comments)
 
-        # Detect Perplexity citation: L1 item with no Claude extraction
-        is_citation = r.source_type == "official" and r.official_info is None
+        # Detect Perplexity lightweight citation: L1 item with NO Claude extraction
+        # AND a very short content (the Perplexity citation snippet, ~200-400 chars).
+        # Firecrawl-scraped pages also have no official_info (driver analysis is
+        # attached only to the consolidated item), but their content is 5k-10k chars
+        # of actual brand copy — those must NOT be rendered as tiny citation cards.
+        content_len = len(r.content or "")
+        is_citation = (
+            r.source_type == "official"
+            and r.official_info is None
+            and content_len < 500
+        )
 
         item = {
             "url": r.url,
