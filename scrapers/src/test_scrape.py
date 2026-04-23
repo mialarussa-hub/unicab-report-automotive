@@ -1339,12 +1339,12 @@ async def _scrape_official_website(
             url = u.get("url", "")
             if not url or url in seen_urls or _is_junk_url(url):
                 continue
-            title = u.get("title", "")
-            desc = u.get("description", "")
-            combined = f"{url} {title} {desc}".lower()
-
-            # Require a model variant match in the combined text
-            if any(term in combined for term in variant_terms):
+            # Match variants on the URL PATH only, not on title/description.
+            # Descriptions commonly cross-link to sibling models ("Scopri anche
+            # DR 3, DR 5..."), producing false positives where a DR 1 page
+            # matched the DR 3 query through a cross-link in the desc.
+            url_lower = url.lower()
+            if any(term in url_lower for term in variant_terms):
                 relevant_urls.append(u)
                 seen_urls.add(url)
 
@@ -1367,8 +1367,11 @@ async def _scrape_official_website(
             for r in search_resp.results:
                 if not r.url or r.url in seen_urls or _is_junk_url(r.url):
                     continue
-                combined = f"{r.url} {r.title or ''} {(r.content or '')[:200]}".lower()
-                if not any(term in combined for term in variant_terms):
+                # Match only on URL (not title/content): the search result snippet
+                # may cross-reference sibling models — false positives we already
+                # saw with DR (/dr1ev/promozioni matched because snippet named DR 3).
+                url_lower = (r.url or "").lower()
+                if not any(term in url_lower for term in variant_terms):
                     skipped_off_model += 1
                     continue
                 relevant_urls.append({
