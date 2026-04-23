@@ -1259,33 +1259,82 @@ async def _scrape_official_perplexity(
     return items
 
 
-def _model_url_variants(model: str, registry_variants: list[str]) -> list[str]:
-    """Generate URL-friendly permutations of a model name for substring matching.
+def _normalize_model_tokens(text: str) -> list[str]:
+    """Tokenize a model name / URL path into alphanumeric atoms, stripping trailing '.0'.
 
-    Example: "DR 3.0" → {"dr 3.0", "dr-3.0", "dr3.0", "dr 30", "dr-30", "dr30",
-                        "dr 3-0", "dr-3-0", "dr3-0"}.
-    Covers common URL slug conventions: dots→hyphens, spaces→hyphens/stripped.
+    Mirrors how a human reads model names: "DR 3.0", "DR 3", "dr-3", "dr3" all
+    reduce to the same token list ["dr", "3"]. The trailing ".0" (Italian commercial
+    convention for base displacement naming) is semantically empty and stripped so
+    registry "DR 3.0" matches a site slug "/modelli/dr-3/".
+
+    Decimal displacements like "1.5" are NOT stripped — only integer.0 suffixes.
+
+    Examples:
+        "DR 3.0"            -> ["dr", "3"]
+        "DR 5 Full hybrid"  -> ["dr", "5", "full", "hybrid"]
+        "/modelli/dr-3/"    -> ["modelli", "dr", "3"]
+        "/model/zs-hev"     -> ["model", "zs", "hev"]
+        "1.5 TSI"           -> ["1", "5", "tsi"]   (1.5 kept as 1+5 tokens)
     """
-    seen: set[str] = set()
-    def _add(s: str) -> None:
-        s = s.strip().lower()
-        if s and s not in seen:
-            seen.add(s)
+    if not text:
+        return []
+    s = text.lower()
+    # Strip trailing ".0" that is NOT followed by another digit, so "3.0" -> "3"
+    # but "1.5" or "10.25" stay as-is.
+    s = re.sub(r'(\d+)\.0(?!\d)', r'\1', s)
+    return re.findall(r'[a-z]+|[0-9]+', s)
 
-    bases = [model] + list(registry_variants)
-    for raw in bases:
-        if not raw:
+
+def _path_contains_model(url: str, model_token_sets: list[list[str]]) -> bool:
+    """True if any variant of the model appears in the URL path with token boundaries.
+
+    Boundary-aware matching (vs simple prefix): the query tokens must map to a
+    substring of the path that is bounded by non-alphanumerics (or string ends)
+    on both sides, so "500" does NOT match "500x" but does match "/500/" or "/500-it/".
+    Between tokens we allow zero or more non-alphanumeric separators, so "DR 3"
+    matches both "/dr-3/" (hyphenated) and "/dr3/" (concatenated).
+    """
+    if not url or not model_token_sets:
+        return False
+    try:
+        from urllib.parse import urlparse
+        path = urlparse(url).path or ""
+    except Exception:
+        return False
+    if not path:
+        return False
+
+    # Normalize same way as _normalize_model_tokens (lowercase + strip trailing ".0"),
+    # but keep the string so we can apply boundary-aware regex.
+    path_norm = path.lower()
+    path_norm = re.sub(r'(\d+)\.0(?!\d)', r'\1', path_norm)
+
+    for tokens in model_token_sets:
+        if not tokens:
             continue
-        r = raw.strip().lower()
-        _add(r)
-        _add(r.replace(" ", "-"))
-        _add(r.replace(" ", ""))
-        _add(r.replace(".", "-"))
-        _add(r.replace(".", ""))
-        _add(r.replace(".", "-").replace(" ", "-"))
-        _add(r.replace(".", "").replace(" ", "-"))
-        _add(r.replace(".", "").replace(" ", ""))
-    return list(seen)
+        # Build pattern: boundary + tok1 + (sep*) + tok2 + ... + boundary
+        # Boundary = start/end of string OR a non-alphanumeric character.
+        inner = r'[^a-z0-9]*'.join(re.escape(t) for t in tokens)
+        pattern = rf'(?:^|[^a-z0-9]){inner}(?:[^a-z0-9]|$)'
+        if re.search(pattern, path_norm):
+            return True
+    return False
+
+
+def _build_model_token_sets(model: str, registry_variants: list[str]) -> list[list[str]]:
+    """Build the set of alternate token lists for a model (canonical + registry variants)."""
+    seen: set[tuple[str, ...]] = set()
+    out: list[list[str]] = []
+    for raw in [model] + list(registry_variants or []):
+        toks = _normalize_model_tokens(raw or "")
+        if not toks:
+            continue
+        key = tuple(toks)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(toks)
+    return out
 
 
 JUNK_URL_SEGMENTS = (
@@ -1321,14 +1370,15 @@ async def _scrape_official_website(
         return [], 0
 
     model_context = build_model_context(brand, model)
-    # Generate URL-friendly variants to catch /dr-3-0, /dr30, /dr3.0, etc.
-    variant_terms = _model_url_variants(model, model_context.get("model_variants", []))
+    # Token-based matching: handle naming variations ("DR 3.0" ↔ "DR 3" ↔ "dr-3")
+    # automatically by tokenizing on alphanumerics and stripping trailing '.0'.
+    model_token_sets = _build_model_token_sets(model, model_context.get("model_variants", []))
 
     total_credits = 0
     items = []
 
     # Step 1: Discover URLs on the brand site using map()
-    logger.warning(f"[{source_name}] MAP: {website_url} search='{model}'")
+    logger.warning(f"[{source_name}] MAP: {website_url} search='{model}' tokens={model_token_sets}")
     map_resp = client.map(website_url, search=model, limit=20)
     total_credits += map_resp.credits_used
 
@@ -1339,12 +1389,9 @@ async def _scrape_official_website(
             url = u.get("url", "")
             if not url or url in seen_urls or _is_junk_url(url):
                 continue
-            # Match variants on the URL PATH only, not on title/description.
-            # Descriptions commonly cross-link to sibling models ("Scopri anche
-            # DR 3, DR 5..."), producing false positives where a DR 1 page
-            # matched the DR 3 query through a cross-link in the desc.
-            url_lower = url.lower()
-            if any(term in url_lower for term in variant_terms):
+            # Match on URL PATH tokens (not title/description): descriptions
+            # cross-link to sibling models, producing false positives.
+            if _path_contains_model(url, model_token_sets):
                 relevant_urls.append(u)
                 seen_urls.add(url)
 
@@ -1367,11 +1414,9 @@ async def _scrape_official_website(
             for r in search_resp.results:
                 if not r.url or r.url in seen_urls or _is_junk_url(r.url):
                     continue
-                # Match only on URL (not title/content): the search result snippet
-                # may cross-reference sibling models — false positives we already
-                # saw with DR (/dr1ev/promozioni matched because snippet named DR 3).
-                url_lower = (r.url or "").lower()
-                if not any(term in url_lower for term in variant_terms):
+                # Match on URL path tokens only (not title/content): search result
+                # snippets cross-reference sibling models. Same logic as map() filter.
+                if not _path_contains_model(r.url, model_token_sets):
                     skipped_off_model += 1
                     continue
                 relevant_urls.append({
@@ -1390,7 +1435,7 @@ async def _scrape_official_website(
 
     logger.warning(
         f"[{source_name}] Found {len(relevant_urls)} relevant official pages "
-        f"(variants={variant_terms[:6]}...)"
+        f"(model_tokens={model_token_sets})"
     )
 
     # Step 2: scrape the PRIMARY page first so we can discover trim slugs from its content.
