@@ -1348,7 +1348,11 @@ async def _scrape_official_website(
                 relevant_urls.append(u)
                 seen_urls.add(url)
 
-    # Augment with search() when map yields < 3 relevant URLs (small/JS-heavy brands)
+    # Augment with search() when map yields < 3 relevant URLs (small/JS-heavy brands).
+    # IMPORTANT: apply the SAME variant-match filter used on map() results. Without
+    # this check, the broader 'site:... brand model' query pulls any page from the
+    # brand domain — e.g. for DR it grabbed /modelli/dr1ev/promozioni when the user
+    # asked for DR 3.0. Defense in depth against Firecrawl search loosening the model.
     if len(relevant_urls) < 3:
         domain = website_url.replace("https://", "").replace("http://", "").rstrip("/")
         search_query = f"site:{domain} {brand} {model}"
@@ -1358,13 +1362,24 @@ async def _scrape_official_website(
         search_resp = client.search(search_query, limit=10, recent_only=False)
         total_credits += search_resp.credits_used
         if not search_resp.error:
+            added_from_search = 0
+            skipped_off_model = 0
             for r in search_resp.results:
                 if not r.url or r.url in seen_urls or _is_junk_url(r.url):
+                    continue
+                combined = f"{r.url} {r.title or ''} {(r.content or '')[:200]}".lower()
+                if not any(term in combined for term in variant_terms):
+                    skipped_off_model += 1
                     continue
                 relevant_urls.append({
                     "url": r.url, "title": r.title, "description": r.content[:200],
                 })
                 seen_urls.add(r.url)
+                added_from_search += 1
+            logger.warning(
+                f"[{source_name}] AUGMENT SEARCH: +{added_from_search} on-model URLs, "
+                f"skipped {skipped_off_model} off-model"
+            )
 
     if not relevant_urls:
         logger.warning(f"[{source_name}] No relevant official pages found for {brand} {model}")
