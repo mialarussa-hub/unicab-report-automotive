@@ -592,18 +592,70 @@ function createSourceCard(source, brandName = '') {
     }
 
     if (source.items && source.items.length > 0) {
-        const itemsList = document.createElement('div');
-        itemsList.className = 'source-items';
+        // For L1 (official) sources, promote the driver-analysis card to the top,
+        // always visible, and collapse the rest of the source items into a "Fonti"
+        // dropdown. For L2/L3 keep the flat list.
+        const isOfficial = source.source_type === 'official';
+        let primaryItem = null;
+        let restItems = source.items;
 
-        for (const item of source.items) {
-            const itemEl = createResultItem(item, source.source);
-            if (item.matches_filter === false) {
-                itemEl.classList.add('non-match');
+        if (isOfficial) {
+            const idx = source.items.findIndex(
+                it => it.ai_official_info && it.ai_official_info.is_driver_analysis
+            );
+            if (idx >= 0) {
+                primaryItem = source.items[idx];
+                restItems = source.items.filter((_, i) => i !== idx);
             }
-            itemsList.appendChild(itemEl);
         }
 
-        card.appendChild(itemsList);
+        if (primaryItem) {
+            const primary = document.createElement('div');
+            primary.className = 'source-primary';
+            primary.innerHTML = `
+                <div class="source-primary-header">
+                    <span class="source-primary-badge">Scheda principale</span>
+                    <span class="source-primary-sub">${escapeHtml(primaryItem.url || '')}</span>
+                </div>
+                ${renderOfficialInfo(primaryItem.ai_official_info)}
+            `;
+            card.appendChild(primary);
+        }
+
+        if (restItems.length > 0) {
+            if (primaryItem) {
+                // Collapsible "Fonti" container with individual item cards inside
+                const fonti = document.createElement('details');
+                fonti.className = 'source-fonti';
+                const summary = document.createElement('summary');
+                summary.innerHTML = `<span class="fonti-label">Fonti analizzate</span> <span class="fonti-count">${restItems.length}</span>`;
+                fonti.appendChild(summary);
+
+                const itemsList = document.createElement('div');
+                itemsList.className = 'source-items';
+                for (const item of restItems) {
+                    const itemEl = createResultItem(item, source.source);
+                    if (item.matches_filter === false) {
+                        itemEl.classList.add('non-match');
+                    }
+                    itemsList.appendChild(itemEl);
+                }
+                fonti.appendChild(itemsList);
+                card.appendChild(fonti);
+            } else {
+                // No primary card (L2/L3 or L1 without driver analysis): flat list
+                const itemsList = document.createElement('div');
+                itemsList.className = 'source-items';
+                for (const item of restItems) {
+                    const itemEl = createResultItem(item, source.source);
+                    if (item.matches_filter === false) {
+                        itemEl.classList.add('non-match');
+                    }
+                    itemsList.appendChild(itemEl);
+                }
+                card.appendChild(itemsList);
+            }
+        }
     }
 
     return card;

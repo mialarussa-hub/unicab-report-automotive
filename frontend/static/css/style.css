@@ -1708,6 +1708,88 @@ body.show-non-matches .ai-comment.non-match {
     font-size: 0.9rem;
 }
 
+/* L1 layout: promoted primary card + collapsible "Fonti" list */
+.source-primary {
+    padding: 0.75rem 1rem 1rem;
+    background: #fff;
+    border-left: 4px solid #1a56db;
+    margin-bottom: 0.75rem;
+}
+
+.source-primary-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.source-primary-badge {
+    background: #1a56db;
+    color: white;
+    padding: 0.25rem 0.7rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.source-primary-sub {
+    font-size: 0.78rem;
+    color: #64748b;
+    word-break: break-all;
+}
+
+.source-fonti {
+    margin-top: 0.5rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.source-fonti > summary {
+    cursor: pointer;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    color: #475569;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.15s;
+}
+
+.source-fonti > summary:hover {
+    background: #f8fafc;
+}
+
+.source-fonti > summary::before {
+    content: '\25B8';
+    display: inline-block;
+    transition: transform 0.15s;
+    color: #64748b;
+}
+
+.source-fonti[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.source-fonti .fonti-label {
+    font-weight: 600;
+}
+
+.source-fonti .fonti-count {
+    background: #e2e8f0;
+    color: #475569;
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.source-fonti .source-items {
+    padding: 0 0.5rem 0.75rem;
+}
+
 /* L1 Driver Analysis (Phase A — communication drivers) */
 .official-info.driver-analysis {
     padding: 0.75rem;
