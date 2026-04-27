@@ -471,7 +471,12 @@ async def _scrape_alvolante_source(brand: str, model: str, source: dict) -> Sour
 
 
 async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceResult:
-    """News strategy: search with scrapeOptions → get full markdown directly, no separate scrape."""
+    """News strategy: search (urls only) → relevance → scrape ranked URLs.
+
+    NOTA: il pattern "search con with_markdown=True" è fragile per testate che
+    bloccano lo scraping inline di Firecrawl (es. quattroruote.it restituisce
+    0 URL in quel caso). Usiamo 2-step come per AlVolante.
+    """
     start = time.time()
     name = source.get("name", "Unknown")
     url = source.get("url", "")
@@ -485,15 +490,15 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
     except ValueError as e:
         return SourceResult(source=name, source_type="news", status="error", error=str(e))
 
-    # --- STEP 1: Search with full markdown (eliminates separate scrape) ---
+    # --- STEP 1: Search (urls only, no inline scrape) ---
     found_urls = {}
     total_credits = 0
 
     for term in search_terms:
         for suffix in ["recensione", "prova", "prova su strada", "news", "novità", ""]:
             query = f"site:{domain} {term} {suffix}".strip()
-            logger.warning(f"[{name}] SEARCH+MD: '{query}'")
-            resp = client.search(query, limit=5, with_markdown=True)
+            logger.warning(f"[{name}] SEARCH: '{query}'")
+            resp = client.search(query, limit=10, recent_only=True, with_markdown=False)
             total_credits += resp.credits_used
 
             if resp.error:
@@ -505,7 +510,6 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
                     found_urls[r.url] = {
                         "title": r.title or "",
                         "snippet": (r.content or "")[:300],
-                        "full_content": r.content or "",
                     }
 
     if not found_urls:
@@ -515,7 +519,7 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    logger.warning(f"[{name}] Found {len(found_urls)} URLs with markdown, scoring relevance...")
+    logger.warning(f"[{name}] Found {len(found_urls)} URLs, scoring relevance...")
 
     # --- STEP 2: Relevance scoring ---
     ranked = filter_and_rank(found_urls, brand, model, model_context)
@@ -528,12 +532,25 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
             duration_ms=int((time.time() - start) * 1000),
         )
 
-    # --- STEP 3: Build items directly from search results (already have markdown!) ---
+    # Cap top 10 per non esplodere i credits su testate con tanti match
+    ranked = ranked[:10]
+
+    # --- STEP 3: Scrape ranked URLs (uno scrape per articolo) ---
     items = []
     for page_url, meta in ranked:
-        full_content = found_urls[page_url].get("full_content", "")
+        relevance_score = meta.get("score", 0)
+        logger.warning(f"[{name}] SCRAPE: {page_url} (relevance={relevance_score})")
+        scrape_resp = client.scrape(page_url)
+        total_credits += scrape_resp.credits_used
+
+        if scrape_resp.error:
+            logger.warning(f"[{name}] Scrape error: {scrape_resp.error}")
+            full_content = meta.get("snippet", "")
+        else:
+            full_content = scrape_resp.results[0].content if scrape_resp.results else ""
+
         has_content = len(full_content) > 200
-        logger.warning(f"[{name}] Result: {page_url} — {len(full_content)} chars (relevance={meta.get('score', 0)})")
+        logger.warning(f"[{name}] Scraped {page_url}: {len(full_content)} chars")
 
         items.append({
             "url": page_url,
@@ -541,7 +558,7 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
             "content": full_content[:5000],
             "_full_content": full_content,
             "content_length": len(full_content),
-            "relevance_score": meta.get("score", 0),
+            "relevance_score": relevance_score,
             "scraped": has_content,
         })
 
@@ -694,8 +711,11 @@ async def _scrape_news_motori_source(brand: str, model: str, source: dict) -> So
     for term in all_terms:
         for suffix in ["recensione", "prova", "novità", "news", ""]:
             query = f"site:{firecrawl_domain} {term} {suffix}".strip()
-            logger.warning(f"[{name}] SEARCH+MD: '{query}'")
-            resp = client.search(query, limit=10, recent_only=True, with_markdown=True)
+            logger.warning(f"[{name}] SEARCH: '{query}'")
+            # NB: with_markdown=False — l'inline scrape di Firecrawl restituisce
+            # 0 URL su alcune testate (es. corriere) anche quando la search da
+            # sola ne troverebbe. Lo scrape va fatto in step separato.
+            resp = client.search(query, limit=10, recent_only=True, with_markdown=False)
             total_credits += resp.credits_used
 
             if resp.error:
@@ -707,12 +727,7 @@ async def _scrape_news_motori_source(brand: str, model: str, source: dict) -> So
                     found_urls[r.url] = {
                         "title": r.title or "",
                         "snippet": (r.content or "")[:300],
-                        "full_content": r.content or "",
                     }
-                elif r.url and r.url in found_urls and not found_urls[r.url].get("full_content"):
-                    # Se RSS aveva già messo l'URL ma senza full_content, arricchiamo
-                    if r.content:
-                        found_urls[r.url]["full_content"] = r.content
 
     if not found_urls:
         return SourceResult(
@@ -737,22 +752,18 @@ async def _scrape_news_motori_source(brand: str, model: str, source: dict) -> So
     # Cap top N (allineato budget AlVolante)
     ranked = ranked[:NEWS_MOTORI_MAX_ITEMS]
 
-    # --- STEP 3: Costruzione items, scrape solo per articoli senza full_content (RSS-only) ---
+    # --- STEP 3: Scrape ranked URLs (sempre, search non porta contenuto inline) ---
     items = []
     for page_url, meta in ranked:
         relevance_score = meta.get("score", 0)
-        full_content = found_urls[page_url].get("full_content", "")
-
-        if not full_content:
-            # Articolo arrivato da RSS, serve scrape Firecrawl per contenuto integrale
-            logger.warning(f"[{name}] SCRAPE (RSS-only): {page_url} (relevance={relevance_score})")
-            scrape_resp = client.scrape(page_url)
-            total_credits += scrape_resp.credits_used
-            if scrape_resp.error:
-                logger.warning(f"[{name}] Scrape error: {scrape_resp.error}")
-                full_content = meta.get("snippet", "")
-            else:
-                full_content = scrape_resp.results[0].content if scrape_resp.results else ""
+        logger.warning(f"[{name}] SCRAPE: {page_url} (relevance={relevance_score})")
+        scrape_resp = client.scrape(page_url)
+        total_credits += scrape_resp.credits_used
+        if scrape_resp.error:
+            logger.warning(f"[{name}] Scrape error: {scrape_resp.error}")
+            full_content = meta.get("snippet", "")
+        else:
+            full_content = scrape_resp.results[0].content if scrape_resp.results else ""
 
         has_content = len(full_content) > 200
         logger.warning(f"[{name}] Result: {page_url} — {len(full_content)} chars (relevance={relevance_score})")
