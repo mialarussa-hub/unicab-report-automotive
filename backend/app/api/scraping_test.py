@@ -322,7 +322,7 @@ async def _run_scraping_background(
                     "cilindrata": cilindrata,
                     "sources": sources_list,
                     "session_id": session_id,
-                    "callback_url": "http://api:8000/api/scraping-test/source-complete",
+                    "callback_url": "http://api:8000/scraping-test/source-complete",
                 },
             )
             data = resp.json()
@@ -398,6 +398,21 @@ async def _run_scraping_background(
             session.total_comments = total_comments
             session.total_credits = data.get("total_credits", 0)
             session.duration_ms = data.get("total_duration_ms", 0)
+
+            # Per-source diagnostic summary (rebuilt at finalize regardless of
+            # callback success — the callback is best-effort for real-time UI).
+            session.source_runs = [
+                {
+                    "source": sd.get("source", ""),
+                    "source_type": sd.get("source_type", ""),
+                    "status": sd.get("status", "ok"),
+                    "result_count": len(sd.get("items", []) or []),
+                    "credits_used": int(sd.get("credits_used") or 0),
+                    "duration_ms": int(sd.get("duration_ms") or 0),
+                    "error": sd.get("error"),
+                }
+                for sd in (data.get("sources") or [])
+            ]
 
             # Cascade filter per-phase
             session.filter_effective = await _compute_effective_filter(db, session)
