@@ -24,6 +24,10 @@ class ScrapingSession(Base):
     total_comments: Mapped[int] = mapped_column(Integer, default=0)
     total_credits: Mapped[int] = mapped_column(Integer, default=0)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    # Riepilogo per-fonte: lista di dict con {source, source_type, status, result_count,
+    # credits_used, duration_ms, error}. Permette di mostrare nella UI anche le fonti
+    # interrogate ma senza risultati (status=partial/error).
+    source_runs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     phase_filter: Mapped[str] = mapped_column(String(10), default="all", nullable=False)  # all, L1, L2, L3
     filter_alimentazione: Mapped[str | None] = mapped_column(String(30), nullable=True)
     filter_cilindrata: Mapped[float | None] = mapped_column(Numeric(3, 1), nullable=True)

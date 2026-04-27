@@ -490,8 +490,8 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
     total_credits = 0
 
     for term in search_terms:
-        for suffix in ["recensione", "prova su strada"]:
-            query = f"site:{domain} {term} {suffix}"
+        for suffix in ["recensione", "prova", "prova su strada", "news", "novità", ""]:
+            query = f"site:{domain} {term} {suffix}".strip()
             logger.warning(f"[{name}] SEARCH+MD: '{query}'")
             resp = client.search(query, limit=5, with_markdown=True)
             total_credits += resp.credits_used
@@ -692,8 +692,8 @@ async def _scrape_news_motori_source(brand: str, model: str, source: dict) -> So
         all_terms.append(brand)  # brand-only per catturare panoramiche
 
     for term in all_terms:
-        for suffix in ["recensione", "prova", "novità"]:
-            query = f"site:{firecrawl_domain} {term} {suffix}"
+        for suffix in ["recensione", "prova", "novità", "news", ""]:
+            query = f"site:{firecrawl_domain} {term} {suffix}".strip()
             logger.warning(f"[{name}] SEARCH+MD: '{query}'")
             resp = client.search(query, limit=10, recent_only=True, with_markdown=True)
             total_credits += resp.credits_used

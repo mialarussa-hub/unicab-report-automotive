@@ -497,6 +497,21 @@ async def source_complete(
     source_type = source_data.get("source_type", "")
     items = source_data.get("items", [])
 
+    # Append per-source diagnostic summary (visible in UI even when items is empty).
+    # Done before result inserts so partial/error sources are tracked too.
+    run_summary = {
+        "source": source_name,
+        "source_type": source_type,
+        "status": source_data.get("status", "ok"),
+        "result_count": len(items),
+        "credits_used": int(source_data.get("credits_used") or 0),
+        "duration_ms": int(source_data.get("duration_ms") or 0),
+        "error": source_data.get("error"),
+    }
+    runs = list(session.source_runs or [])
+    runs.append(run_summary)
+    session.source_runs = runs
+
     saved_count = 0
     saved_comments = 0
 
@@ -680,6 +695,36 @@ async def get_session(
             item["ai_official_info"] = r.official_info
 
         sources_map[key]["items"].append(item)
+
+    # Merge per-source diagnostic runs: sources interrogate ma senza risultati
+    # (status=partial/error) non hanno entry in sources_map. Le aggiungiamo qui
+    # per renderle visibili in UI con il loro stato, motivo e crediti spesi.
+    for run in (session.source_runs or []):
+        if not isinstance(run, dict):
+            continue
+        key = run.get("source") or ""
+        if not key:
+            continue
+        if key in sources_map:
+            # Arricchiamo la entry esistente con metadati che la lista results non ha.
+            entry = sources_map[key]
+            entry["status"] = run.get("status") or entry.get("status") or "ok"
+            entry["credits_used"] = int(run.get("credits_used") or entry.get("credits_used") or 0)
+            entry["duration_ms"] = int(run.get("duration_ms") or entry.get("duration_ms") or 0)
+            if run.get("error"):
+                entry["error"] = run["error"]
+        else:
+            # Fonte interrogata ma senza items: la mostriamo comunque con stato.
+            sources_map[key] = {
+                "source": key,
+                "source_type": run.get("source_type") or "news",
+                "status": run.get("status") or "partial",
+                "result_count": int(run.get("result_count") or 0),
+                "credits_used": int(run.get("credits_used") or 0),
+                "duration_ms": int(run.get("duration_ms") or 0),
+                "error": run.get("error"),
+                "items": [],
+            }
 
     return {
         "session_id": str(session.id),
