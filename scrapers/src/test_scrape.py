@@ -228,6 +228,10 @@ async def _scrape_web_source(brand: str, model: str, source: dict,
         # AlVolante: editorial pages WITH user comments — use forum strategy
         # (search → scrape → parse comments) but with news-style queries
         return await _scrape_alvolante_source(brand, model, source)
+    elif _is_news_motori_domain(url):
+        # Rubriche motori dei quotidiani generalisti (Corriere, Repubblica, ...)
+        # Mix RSS (free, fresh) + Firecrawl search (archive coverage)
+        return await _scrape_news_motori_source(brand, model, source)
     else:
         return await _scrape_news_source(brand, model, source)
 
@@ -542,6 +546,228 @@ async def _scrape_news_source(brand: str, model: str, source: dict) -> SourceRes
         })
 
     # --- STEP 4: Clean with Claude AI (uses full content) ---
+    await _clean_items_with_ai(items, name)
+
+    for item in items:
+        item.pop("_full_content", None)
+
+    return SourceResult(
+        source=name, source_type="news",
+        status="ok" if items else "partial",
+        result_count=len(items), credits_used=total_credits,
+        items=items, duration_ms=int((time.time() - start) * 1000),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rubriche motori dei quotidiani generalisti (Corriere, Repubblica, ecc.)
+# ---------------------------------------------------------------------------
+# Strategia mix:
+#   1. RSS (gratis) — top recenti, filtro brand/model in title+description
+#   2. Firecrawl search site:dominio (archivio 12 mesi) — copertura storica
+#   3. Merge dedup → relevance filter → top N → scrape full pages
+#   4. AI cleanup per estrarre commenti embedded (raramente presenti su queste testate)
+
+NEWS_MOTORI_DOMAINS = (
+    "corriere.it",
+    "repubblica.it",
+    "lastampa.it",
+    "gazzetta.it",
+    "corrieredellosport.it",
+)
+
+# Mappa dominio → URL feed RSS della rubrica motori (None = nessun RSS, solo Firecrawl)
+NEWS_MOTORI_RSS_FEEDS: dict[str, str | None] = {
+    "corriere.it": "https://xml2.corriereobjects.it/rss/motori.xml",
+    # Le altre testate verranno aggiunte negli sprint successivi (Repubblica/LaStampa/Gazzetta/CdS)
+}
+
+# Numero max di articoli per testata (allineato al budget AlVolante: top 5-10)
+NEWS_MOTORI_MAX_ITEMS = 10
+
+
+def _is_news_motori_domain(url: str) -> bool:
+    """True se l'URL appartiene a una rubrica motori dei quotidiani generalisti."""
+    u = (url or "").lower()
+    return any(d in u for d in NEWS_MOTORI_DOMAINS)
+
+
+def _domain_key(url: str) -> str | None:
+    """Estrai la chiave dominio (es. 'corriere.it') da un URL della source."""
+    u = (url or "").lower()
+    for d in NEWS_MOTORI_DOMAINS:
+        if d in u:
+            return d
+    return None
+
+
+async def _fetch_rss_filtered(
+    rss_url: str, brand: str, model: str, model_context: dict, source_name: str,
+) -> list[dict]:
+    """Scarica un feed RSS e filtra le entry per match brand/model in title+description.
+
+    Restituisce list di dict {url, title, snippet} compatibili con found_urls.
+    Non costa credits Firecrawl.
+    """
+    import httpx
+    import feedparser
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(rss_url, headers={"User-Agent": "UNICAB-Scraper/1.0"})
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
+    except Exception as e:
+        logger.warning(f"[{source_name}] RSS fetch error ({rss_url}): {e}")
+        return []
+
+    if not feed.entries:
+        logger.warning(f"[{source_name}] RSS empty: {rss_url}")
+        return []
+
+    # Token di match: brand + alias + model + varianti (case-insensitive)
+    brand_terms = [brand.lower()] + [a.lower() for a in model_context.get("brand_aliases", [])]
+    model_terms = [model.lower()] + [v.lower() for v in model_context.get("model_variants", [])] if model else []
+
+    matched = []
+    for entry in feed.entries:
+        title = (getattr(entry, "title", "") or "").strip()
+        link = (getattr(entry, "link", "") or "").strip()
+        # Description spesso contiene HTML; lo lasciamo grezzo, basta il testo per il match
+        description = (getattr(entry, "description", "") or "").strip()
+        haystack = f"{title} {description}".lower()
+
+        has_brand = any(t in haystack for t in brand_terms)
+        has_model = any(t in haystack for t in model_terms) if model_terms else True
+
+        if link and has_brand and has_model:
+            matched.append({
+                "url": link,
+                "title": title,
+                "snippet": re.sub(r"<[^>]+>", " ", description)[:300],
+            })
+
+    logger.warning(f"[{source_name}] RSS: {len(matched)}/{len(feed.entries)} entries match brand/model")
+    return matched
+
+
+async def _scrape_news_motori_source(brand: str, model: str, source: dict) -> SourceResult:
+    """Mix RSS + Firecrawl search per rubriche motori dei quotidiani generalisti.
+
+    L'URL della source deve essere path-restricted (es. https://www.corriere.it/motori),
+    così Firecrawl filtra solo articoli della rubrica motori.
+    """
+    start = time.time()
+    name = source.get("name", "Unknown")
+    url = source.get("url", "")
+    # Dominio path-restricted per Firecrawl (es. www.corriere.it/motori)
+    firecrawl_domain = url.replace("https://", "").replace("http://", "").rstrip("/")
+    domain_key = _domain_key(url)
+    rss_url = NEWS_MOTORI_RSS_FEEDS.get(domain_key) if domain_key else None
+
+    model_context = build_model_context(brand, model)
+    search_terms = _build_search_terms(brand, model, model_context)
+
+    found_urls: dict[str, dict] = {}
+    total_credits = 0
+
+    # --- STEP 1a: RSS (gratis, copertura recente) ---
+    if rss_url:
+        rss_items = await _fetch_rss_filtered(rss_url, brand, model, model_context, name)
+        for item in rss_items:
+            if item["url"] not in found_urls:
+                found_urls[item["url"]] = {
+                    "title": item["title"],
+                    "snippet": item["snippet"],
+                }
+
+    # --- STEP 1b: Firecrawl search (archivio 12 mesi) ---
+    try:
+        client = FirecrawlClient()
+    except ValueError as e:
+        return SourceResult(source=name, source_type="news", status="error", error=str(e))
+
+    all_terms = list(search_terms)
+    if model:
+        all_terms.append(brand)  # brand-only per catturare panoramiche
+
+    for term in all_terms:
+        for suffix in ["recensione", "prova", "novità"]:
+            query = f"site:{firecrawl_domain} {term} {suffix}"
+            logger.warning(f"[{name}] SEARCH+MD: '{query}'")
+            resp = client.search(query, limit=10, recent_only=True, with_markdown=True)
+            total_credits += resp.credits_used
+
+            if resp.error:
+                logger.warning(f"[{name}] Search error: {resp.error}")
+                continue
+
+            for r in resp.results:
+                if r.url and r.url not in found_urls:
+                    found_urls[r.url] = {
+                        "title": r.title or "",
+                        "snippet": (r.content or "")[:300],
+                        "full_content": r.content or "",
+                    }
+                elif r.url and r.url in found_urls and not found_urls[r.url].get("full_content"):
+                    # Se RSS aveva già messo l'URL ma senza full_content, arricchiamo
+                    if r.content:
+                        found_urls[r.url]["full_content"] = r.content
+
+    if not found_urls:
+        return SourceResult(
+            source=name, source_type="news", status="partial",
+            credits_used=total_credits, error="No articles found (RSS + Firecrawl)",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    logger.warning(f"[{name}] Total {len(found_urls)} articles before relevance, scoring...")
+
+    # --- STEP 2: Relevance scoring ---
+    ranked = filter_and_rank(found_urls, brand, model, model_context)
+
+    if not ranked:
+        return SourceResult(
+            source=name, source_type="news", status="partial",
+            credits_used=total_credits,
+            error=f"Found {len(found_urls)} articles but none passed relevance filter",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    # Cap top N (allineato budget AlVolante)
+    ranked = ranked[:NEWS_MOTORI_MAX_ITEMS]
+
+    # --- STEP 3: Costruzione items, scrape solo per articoli senza full_content (RSS-only) ---
+    items = []
+    for page_url, meta in ranked:
+        relevance_score = meta.get("score", 0)
+        full_content = found_urls[page_url].get("full_content", "")
+
+        if not full_content:
+            # Articolo arrivato da RSS, serve scrape Firecrawl per contenuto integrale
+            logger.warning(f"[{name}] SCRAPE (RSS-only): {page_url} (relevance={relevance_score})")
+            scrape_resp = client.scrape(page_url)
+            total_credits += scrape_resp.credits_used
+            if scrape_resp.error:
+                logger.warning(f"[{name}] Scrape error: {scrape_resp.error}")
+                full_content = meta.get("snippet", "")
+            else:
+                full_content = scrape_resp.results[0].content if scrape_resp.results else ""
+
+        has_content = len(full_content) > 200
+        logger.warning(f"[{name}] Result: {page_url} — {len(full_content)} chars (relevance={relevance_score})")
+
+        items.append({
+            "url": page_url,
+            "title": meta.get("title", ""),
+            "content": full_content[:5000],
+            "_full_content": full_content,
+            "content_length": len(full_content),
+            "relevance_score": relevance_score,
+            "scraped": has_content,
+        })
+
+    # --- STEP 4: AI cleanup (estrazione commenti embedded se presenti) ---
     await _clean_items_with_ai(items, name)
 
     for item in items:
