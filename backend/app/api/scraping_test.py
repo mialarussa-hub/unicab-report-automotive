@@ -85,7 +85,12 @@ def _motori_match(motore_info, want_alim, want_cil):
             m_cil = None
         if want_alim and m_alim != want_alim:
             continue
-        if want_cil is not None and (m_cil is None or abs(m_cil - want_cil) > 0.05):
+        # Cilindrata: applichiamo il filtro hard solo quando l'AI l'ha estratta.
+        # Se m_cil è None (estrazione mancante) non penalizziamo l'item: la sola
+        # alimentazione conferma la pertinenza. Senza questa tolleranza, articoli
+        # tipo "Fiat Grande Panda benzina" (cil=null estratta da prosa libera)
+        # venivano marcati non pertinenti contro filtro (benzina, 1.2).
+        if want_cil is not None and m_cil is not None and abs(m_cil - want_cil) > 0.05:
             continue
         return True
     return False
