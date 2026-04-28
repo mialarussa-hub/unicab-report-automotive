@@ -781,6 +781,207 @@ async def analyze_communication_drivers(
         return None
 
 
+# ---------------------------------------------------------------------------
+# L2 minireport — sintesi narrativa di articoli e commenti delle testate media
+# ---------------------------------------------------------------------------
+
+L2_MEDIA_SYNTHESIS_PROMPT = """Sei un analista che sintetizza la copertura editoriale media di un modello automobilistico.
+
+Ricevi un pacchetto di articoli editoriali pubblicati da testate giornalistiche italiane (riviste motori, rubriche motori dei quotidiani) su {brand} {model}. Ogni articolo include il testo dell'articolo e (quando disponibili) i commenti utenti pubblicati sotto l'articolo.
+
+COMPITO: produrre un minireport sintetico con tre sezioni distinte.
+
+OUTPUT (restituisci ESATTAMENTE questa struttura, UN solo oggetto JSON):
+
+{{
+  "is_l2_synthesis": true,
+  "brand": "{brand}",
+  "model": "{model}",
+  "tono_commenti_utenti": {{
+    "sentiment_dominante": "positivo | neutro | misto | critico",
+    "n_commenti_analizzati": 0,
+    "descrizione": "1-2 frasi che sintetizzano il tono complessivo dei commenti utenti riscontrati"
+  }},
+  "giornalisti_punti_forza": [
+    {{
+      "tema": "etichetta breve del tema (es. Design e identità, Rapporto qualità/prezzo, Comfort di marcia)",
+      "descrizione": "1-2 frasi che riassumono ciò che i giornalisti apprezzano",
+      "fonti": ["url_articolo_1", "url_articolo_2"]
+    }}
+  ],
+  "giornalisti_punti_debolezza": [
+    {{
+      "tema": "etichetta breve",
+      "descrizione": "1-2 frasi che riassumono la criticità segnalata dai giornalisti",
+      "fonti": ["url_articolo"]
+    }}
+  ],
+  "note_metodologiche": "limitazioni dell'analisi rispetto al pacchetto fornito (es. 'pochi articoli con prove su strada, prevalenza di news di prodotto'). NON menzionare fonti non presenti nel pacchetto come mancanze."
+}}
+
+REGOLE FONDAMENTALI:
+1. **Punti di forza/debolezza**: identifica i temi RICORRENTI tra più articoli. Includi MASSIMO 5 temi per sezione, MINIMO 0 (lista vuota se non emergono temi solidi). Scarta i temi citati una sola volta.
+2. **fonti**: SOLO URL effettivamente presenti nel pacchetto, MAI inventati. Se un tema emerge da un solo articolo NON lo includere (regola di ricorrenza).
+3. **descrizione**: parafrasa, NON riportare quote testuali letterali. Sintesi, non traduzione.
+4. **tono_commenti_utenti.n_commenti_analizzati**: conteggio totale dei commenti utenti nei contenuti forniti (somma di tutti i blocchi "Commenti utenti").
+5. **sentiment_dominante**: scegli il valore che meglio rappresenta la maggioranza dei commenti utenti analizzati. Se i commenti sono troppo pochi (<5) o assenti, usa "neutro" e segnalalo in `descrizione`.
+6. NON confondere la voce dei giornalisti con quella degli utenti: i punti di forza/debolezza vanno estratti SOLO dal corpo degli articoli editoriali, non dai commenti.
+7. Se il pacchetto è povero, lascia liste vuote con onestà — è preferibile a contenuto inventato.
+8. Restituisci SOLO il JSON, nessuna spiegazione, nessun markdown.
+
+REGOLE JSON (importanti — evitano output non parseabile):
+- Nelle stringhe non usare mai virgolette doppie (") nidificate. Usa le virgolette italiane «...» o l'apostrofo tipografico '.
+- Non inserire newline o tab grezzi dentro le stringhe.
+- Verifica che il JSON sia un documento singolo valido prima di restituirlo.
+
+PACCHETTO ARTICOLI:
+
+{items_text}"""
+
+
+async def analyze_l2_media_synthesis(
+    items: list[dict], brand: str, model: str,
+) -> dict | None:
+    """Generate a synthetic L2 minireport from media articles + user comments.
+
+    Single Claude call across all L2 items in the session. Returns a dict with
+    `tono_commenti_utenti`, `giornalisti_punti_forza`, `giornalisti_punti_debolezza`.
+    None on failure (caller falls back gracefully).
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key or not items:
+        return None
+
+    parts = []
+    total_user_comments = 0
+    for i, item in enumerate(items):
+        title = item.get("title", "Senza titolo")
+        url = item.get("url", "")
+        content = (item.get("content") or "")[:5000]
+        ai_comments = item.get("ai_comments") or []
+        total_user_comments += len(ai_comments)
+
+        # Format embedded user comments compactly so the LLM can extract sentiment.
+        comments_block = ""
+        if ai_comments:
+            sample = ai_comments[:30]  # cap per article to keep prompt manageable
+            comment_lines = []
+            for c in sample:
+                if isinstance(c, dict):
+                    txt = (c.get("text") or "").strip().replace("\n", " ")[:300]
+                    if txt:
+                        comment_lines.append(f"- {txt}")
+            if comment_lines:
+                more = f" (+{len(ai_comments) - len(sample)} ulteriori)" if len(ai_comments) > len(sample) else ""
+                comments_block = (
+                    f"\n\nCommenti utenti ({len(ai_comments)} totali{more}):\n"
+                    + "\n".join(comment_lines)
+                )
+
+        parts.append(
+            f"[{i+1}] Testata: derivata dall'URL\nTitolo: {title}\nURL: {url}\n\n{content}{comments_block}"
+        )
+
+    items_text = "\n\n===\n\n".join(parts)
+    if len(items_text) > 80000:
+        items_text = items_text[:80000] + "\n\n[... troncato]"
+
+    base_prompt = L2_MEDIA_SYNTHESIS_PROMPT.format(
+        brand=brand, model=model, items_text=items_text,
+    )
+
+    async def _call_and_parse(prompt_text: str, attempt_label: str) -> tuple[dict | None, str]:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 6000,
+                    "messages": [{"role": "user", "content": prompt_text}],
+                },
+            )
+            if resp.status_code != 200:
+                logger.error(
+                    f"Claude L2-synthesis [{attempt_label}] API {resp.status_code}: "
+                    f"{resp.text[:300]}"
+                )
+                return None, ""
+            data = resp.json()
+        text = ""
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text += block.get("text", "")
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+        try:
+            return json.loads(text), text
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"Claude L2-synthesis [{attempt_label}] JSON error: {e} "
+                f"| raw[0:400]={text[:400]!r}"
+            )
+            return None, text
+
+    try:
+        result, raw = await _call_and_parse(base_prompt, "attempt-1")
+
+        if result is None:
+            retry_prompt = (
+                base_prompt
+                + "\n\n---\nRITENTATIVO: il tentativo precedente ha prodotto JSON malformato. "
+                "Rigenera l'output assicurandoti che NESSUNA stringa contenga virgolette doppie "
+                "non escapate. Usa SEMPRE «...» o l'apostrofo ' al posto della virgoletta doppia \". "
+                "Verifica che il JSON sia perfettamente parseabile prima di restituirlo."
+            )
+            result, raw = await _call_and_parse(retry_prompt, "attempt-2-retry")
+
+        if result is None:
+            logger.error(
+                f"L2 synthesis failed for {brand} {model} after 2 attempts. "
+                f"Last raw response (truncated): {raw[:600]!r}"
+            )
+            return None
+
+        # Sanity: ensure the section keys exist as lists/dicts; trim to max 5 each.
+        result.setdefault("is_l2_synthesis", True)
+        forza = result.get("giornalisti_punti_forza") or []
+        debolezza = result.get("giornalisti_punti_debolezza") or []
+        result["giornalisti_punti_forza"] = [
+            f for f in forza if isinstance(f, dict) and f.get("tema")
+        ][:5]
+        result["giornalisti_punti_debolezza"] = [
+            d for d in debolezza if isinstance(d, dict) and d.get("tema")
+        ][:5]
+
+        # Use the actual count we observed if model omitted/wrong-counted
+        tono = result.get("tono_commenti_utenti")
+        if isinstance(tono, dict):
+            try:
+                if not tono.get("n_commenti_analizzati"):
+                    tono["n_commenti_analizzati"] = total_user_comments
+            except Exception:
+                tono["n_commenti_analizzati"] = total_user_comments
+
+        logger.warning(
+            f"L2 synthesis for {brand} {model}: "
+            f"{len(result['giornalisti_punti_forza'])} plus, "
+            f"{len(result['giornalisti_punti_debolezza'])} minus, "
+            f"{total_user_comments} commenti utenti"
+        )
+        return result
+
+    except Exception as e:
+        logger.error(f"Claude L2-synthesis error: {e}")
+        return None
+
+
 async def discover_trim_slugs(content: str, brand: str, model: str) -> list[str]:
     """Mini-call to Claude Haiku: identify trim/allestimento slugs from the model page.
 

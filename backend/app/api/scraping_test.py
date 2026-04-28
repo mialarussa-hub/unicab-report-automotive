@@ -413,6 +413,12 @@ async def _run_scraping_background(
             session.total_credits = data.get("total_credits", 0)
             session.duration_ms = data.get("total_duration_ms", 0)
 
+            # L2 minireport (sintesi narrativa media/giornalisti) — opzionale,
+            # presente solo se la sessione ha incluso fonti L2 con almeno un item.
+            l2_synth = data.get("l2_synthesis")
+            if isinstance(l2_synth, dict):
+                session.l2_synthesis = l2_synth
+
             # Per-source diagnostic summary (rebuilt at finalize regardless of
             # callback success — the callback is best-effort for real-time UI).
             session.source_runs = [
@@ -767,6 +773,7 @@ async def get_session(
         "filter_effective": session.filter_effective,
         "is_featured": bool(session.is_featured),
         "sources": list(sources_map.values()),
+        "l2_synthesis": session.l2_synthesis,
         "total_credits": session.total_credits,
         "total_duration_ms": session.duration_ms,
     }

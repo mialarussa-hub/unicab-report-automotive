@@ -188,12 +188,29 @@ async def run_test_scrape(
             source_results.append(result)
             total_credits += result.credits_used
 
+    # L2 synthesis: aggrega tutti gli articoli L2 (source_type in {news, perplexity})
+    # in un minireport unico (tono utenti + plus/minus giornalisti). 1 chiamata Claude.
+    l2_synthesis = None
+    l2_items: list[dict] = []
+    for sr in source_results:
+        if sr.source_type in ("news", "perplexity") and sr.items:
+            l2_items.extend(sr.items)
+    if l2_items:
+        from src.content_cleaner import analyze_l2_media_synthesis
+        try:
+            l2_synthesis = await analyze_l2_media_synthesis(l2_items, brand, model)
+        except Exception as e:
+            logger.error(f"L2 synthesis call raised: {e}")
+
     total_ms = int((time.time() - start) * 1000)
 
-    return asdict(TestScrapeResponse(
+    response = asdict(TestScrapeResponse(
         brand=brand, model=model, sources=source_results,
         total_credits=total_credits, total_duration_ms=total_ms,
     ))
+    if l2_synthesis is not None:
+        response["l2_synthesis"] = l2_synthesis
+    return response
 
 
 async def _scrape_source(brand: str, model: str, source: dict,

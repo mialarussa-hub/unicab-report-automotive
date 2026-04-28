@@ -2125,3 +2125,104 @@ body.show-non-matches .ai-comment.non-match {
     padding: 0;
 }
 
+/* L2 synthesis card — minireport media/giornalisti in cima alla sezione L2 */
+.l2-synthesis-card {
+    border-left: 4px solid #1a56db;
+    background: #f8fafc;
+}
+
+.l2-synth-body {
+    padding: 0.5rem 0.75rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.synth-section h4 {
+    margin: 0 0 0.4rem 0;
+    font-size: 0.92rem;
+    color: #1e293b;
+    font-weight: 600;
+}
+
+.synth-tono {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.3rem;
+}
+
+.synth-sentiment-badge {
+    padding: 0.18rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+.sentiment-positivo { background: #dcfce7; color: #166534; }
+.sentiment-neutro   { background: #e2e8f0; color: #475569; }
+.sentiment-misto    { background: #fef3c7; color: #92400e; }
+.sentiment-critico  { background: #fee2e2; color: #991b1b; }
+
+.synth-comment-count {
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.synth-themes {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.synth-themes li {
+    padding: 0.45rem 0.55rem;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+}
+
+.synth-tema {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.9rem;
+    margin-bottom: 0.2rem;
+}
+
+.synth-descr {
+    font-size: 0.86rem;
+    color: #475569;
+    line-height: 1.4;
+}
+
+.synth-fonti {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: #64748b;
+}
+
+.synth-fonti a {
+    color: #1a56db;
+    text-decoration: none;
+}
+
+.synth-fonti a:hover { text-decoration: underline; }
+
+.synth-empty {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.synth-note {
+    font-size: 0.8rem;
+    color: #64748b;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 0.5rem;
+}
+
