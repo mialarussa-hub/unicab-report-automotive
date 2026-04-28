@@ -113,6 +113,12 @@ if (editForm) editForm.addEventListener('submit', async (e) => {
     }
 });
 
+// Map id → activity for the currently rendered list. Populated by loadActivities,
+// consumed by openEditModalById so the edit button only needs to pass an id (safe
+// for inline onclick) instead of the full JSON-serialized object (would break on
+// embedded apostrophes/quotes — Italian text routinely contains "l'AI", "dell'X").
+const _activitiesById = {};
+
 async function loadActivities() {
     const container = document.getElementById('activities-list');
     const month = getSelectedMonth();
@@ -128,6 +134,10 @@ async function loadActivities() {
             container.innerHTML = '<p class="empty-state">Nessuna attivita registrata per questo mese.</p>';
             return;
         }
+
+        // Refresh the id→activity map so edit-by-id stays in sync with what's rendered.
+        for (const k of Object.keys(_activitiesById)) delete _activitiesById[k];
+        for (const act of activities) _activitiesById[act.id] = act;
 
         container.innerHTML = '';
         for (const act of activities) {
@@ -202,13 +212,19 @@ function createActivityCard(act) {
             <span class="activity-hours">${act.hours}h</span>
             ${IS_ADMIN ? `
             <div class="activity-actions">
-                <button class="btn-edit" onclick='openEditModal(${JSON.stringify(act)})'>Modifica</button>
+                <button class="btn-edit" onclick="openEditModalById('${act.id}')">Modifica</button>
                 <button class="btn-delete" onclick="deleteActivity('${act.id}')">✕</button>
             </div>
             ` : ''}
         </div>
     `;
     return card;
+}
+
+function openEditModalById(id) {
+    const act = _activitiesById[id];
+    if (!act) return;
+    openEditModal(act);
 }
 
 function openEditModal(act) {
