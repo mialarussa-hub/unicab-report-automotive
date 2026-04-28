@@ -67,6 +67,15 @@ def _motori_match(motore_info, want_alim, want_cil):
         return True
     if not motore_info:
         return False
+    # Caso "articolo generale sul modello": l'AI ha analizzato la pagina ma non
+    # ha individuato versioni specifiche (versioni=[]). L'articolo parla del
+    # modello in generale (es. confronto, news brand, premio, lancio globale)
+    # e resta pertinente a qualunque filtro motore — si applica solo agli
+    # articoli che dichiarano esplicitamente versioni mismatch col filtro.
+    if isinstance(motore_info, dict):
+        versioni = motore_info.get("versioni")
+        if isinstance(versioni, list) and not versioni:
+            return True
     candidates = []
     if isinstance(motore_info, dict):
         versioni = motore_info.get("versioni")
