@@ -608,12 +608,14 @@ NEWS_MOTORI_DOMAINS = (
     "lastampa.it",
     "gazzetta.it",
     "corrieredellosport.it",
+    "it.motor1.com",
 )
 
 # Mappa dominio → URL feed RSS della rubrica motori (None = nessun RSS, solo Firecrawl)
 NEWS_MOTORI_RSS_FEEDS: dict[str, str | None] = {
     "corriere.it": "https://xml2.corriereobjects.it/rss/motori.xml",
-    # Le altre testate verranno aggiunte negli sprint successivi (Repubblica/LaStampa/Gazzetta/CdS)
+    # Per le altre testate il fallback è Firecrawl-only finché non confermiamo
+    # un URL RSS stabile. Aggiungere qui mappature dominio → feed quando disponibile.
 }
 
 # Numero max di articoli per testata (allineato al budget AlVolante: top 5-10)
