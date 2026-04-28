@@ -37,9 +37,12 @@ class ScrapeTestRequest(BaseModel):
 
 
 # Phase → source_type mapping (mirror of frontend LEVELS)
+# youtube_editorial = canale YouTube ufficiale di una testata (Quattroruote,
+# AlVolante, Motor1...) → contenuto editoriale (trascrizioni Whisper) = L2.
+# youtube generico = ricerca cross-canale → user-generated (commenti) = L3.
 PHASE_SOURCE_TYPES = {
     "L1": {"official"},
-    "L2": {"news", "perplexity"},
+    "L2": {"news", "perplexity", "youtube_editorial"},
     "L3": {"forum", "youtube", "social"},
 }
 

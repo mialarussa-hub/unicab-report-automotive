@@ -517,7 +517,7 @@ const LEVELS = [
         label: 'L2 — Media e Giornalisti',
         icon: '\uD83D\uDCF0',
         description: 'Articoli, test e recensioni da fonti specializzate',
-        types: ['news', 'perplexity'],
+        types: ['news', 'perplexity', 'youtube_editorial'],
     },
     {
         key: 'L3',

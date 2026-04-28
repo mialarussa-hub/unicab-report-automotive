@@ -224,6 +224,8 @@ async def _scrape_source(brand: str, model: str, source: dict,
         return await _scrape_perplexity_source(brand, model, source)
     elif "reddit.com" in url:
         return await _scrape_reddit_source(brand, model, source)
+    elif source_type == "youtube_editorial":
+        return await _scrape_youtube_editorial_source(brand, model, source)
     elif source_type == "youtube":
         return await _scrape_youtube_source(brand, model, source)
     else:
@@ -1251,6 +1253,291 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
     except Exception as e:
         return SourceResult(
             source=name, source_type="youtube", status="error",
+            error=str(e), duration_ms=int((time.time() - start) * 1000),
+        )
+    finally:
+        await client.close()
+
+
+# ---------------------------------------------------------------------------
+# L2: YouTube canali editoriali ufficiali delle testate (Quattroruote, ecc.)
+# ---------------------------------------------------------------------------
+# Strategia: search restricted al channelId della testata → per ogni video
+# rilevante scarichiamo l'audio con yt-dlp e lo trascriviamo con Whisper API.
+# La trascrizione diventa il `content` dell'item, alimentando il minireport L2.
+# I commenti utenti sono out-of-scope per il pilota (li tratteremo a parte in L3).
+
+# Mappa URL/handle del canale → channelId YouTube. Hardcoded perché:
+# 1. La risoluzione handle→channelId via API costa 100 quota units a chiamata.
+# 2. Sono pochi canali (5-6 testate), evolvono raramente.
+# 3. La tabella sources non ha un campo config; aggiungerlo solo per questo
+#    caso non vale la migration.
+YOUTUBE_EDITORIAL_CHANNELS: dict[str, str] = {
+    "@quattroruoteit": "UCQHfCaKLtI3LLCWec7s6p_A",
+    # Da aggiungere quando estenderemo: AlVolante, Motor1 Italia, DriveK
+}
+
+
+def _resolve_editorial_channel_id(url: str) -> str | None:
+    """Estrae il channelId dalla URL della source (es. /@QuattroruoteIt → UCQHf...)."""
+    if not url:
+        return None
+    u = url.lower().rstrip("/")
+    # Estrai handle dopo @ se presente nell'URL
+    for handle, cid in YOUTUBE_EDITORIAL_CHANNELS.items():
+        if handle in u:
+            return cid
+    return None
+
+
+async def _download_audio_for_whisper(video_id: str, source_name: str) -> str | None:
+    """Scarica l'audio di un video YouTube come m4a in /tmp e ritorna il path.
+
+    Usa yt-dlp con format 'bestaudio[ext=m4a]/bestaudio' per minimizzare la
+    dimensione (Whisper API ha cap a 25MB per file). Ritorna None su errore.
+    """
+    import tempfile, subprocess
+    out_path = os.path.join(tempfile.gettempdir(), f"yt_{video_id}.m4a")
+    if os.path.exists(out_path):
+        os.remove(out_path)
+    cmd = [
+        "yt-dlp",
+        "-f", "bestaudio[ext=m4a]/bestaudio[abr<=128]/bestaudio",
+        "-o", out_path,
+        "--no-playlist",
+        "--quiet",
+        "--no-warnings",
+        f"https://www.youtube.com/watch?v={video_id}",
+    ]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=180)
+        if proc.returncode != 0:
+            logger.warning(f"[{source_name}] yt-dlp failed for {video_id}: {stderr.decode()[:200]}")
+            return None
+        if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+            logger.warning(f"[{source_name}] yt-dlp produced empty file for {video_id}")
+            return None
+        size_mb = os.path.getsize(out_path) / (1024 * 1024)
+        logger.warning(f"[{source_name}] Downloaded audio for {video_id}: {size_mb:.1f} MB")
+        return out_path
+    except asyncio.TimeoutError:
+        logger.warning(f"[{source_name}] yt-dlp timeout for {video_id}")
+        return None
+    except Exception as e:
+        logger.warning(f"[{source_name}] yt-dlp exception for {video_id}: {e}")
+        return None
+
+
+async def _transcribe_audio_with_whisper(audio_path: str, video_id: str, source_name: str) -> str | None:
+    """Carica un file audio e ritorna la trascrizione testuale via Whisper API.
+
+    Whisper accetta file fino a 25MB. response_format=text ritorna direttamente
+    la stringa, niente parsing JSON. language=it forza l'italiano (più affidabile
+    di auto-detect per parlato motoristico con anglicismi).
+    """
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        logger.error(f"[{source_name}] OPENAI_API_KEY not set, cannot transcribe {video_id}")
+        return None
+
+    size = os.path.getsize(audio_path)
+    if size > 25 * 1024 * 1024:
+        logger.warning(f"[{source_name}] Audio for {video_id} exceeds 25MB ({size}B), skipping")
+        return None
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            with open(audio_path, "rb") as f:
+                files = {"file": (f"{video_id}.m4a", f, "audio/m4a")}
+                data = {
+                    "model": "whisper-1",
+                    "language": "it",
+                    "response_format": "text",
+                }
+                resp = await client.post(
+                    "https://api.openai.com/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    files=files,
+                    data=data,
+                )
+            if resp.status_code != 200:
+                logger.error(
+                    f"[{source_name}] Whisper API {resp.status_code} for {video_id}: "
+                    f"{resp.text[:300]}"
+                )
+                return None
+            text = resp.text.strip()
+            logger.warning(f"[{source_name}] Whisper transcribed {video_id}: {len(text)} chars")
+            return text
+    except Exception as e:
+        logger.error(f"[{source_name}] Whisper exception for {video_id}: {e}")
+        return None
+    finally:
+        try:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+        except Exception:
+            pass
+
+
+async def _scrape_youtube_editorial_source(brand: str, model: str, source: dict) -> SourceResult:
+    """Scrape canale YouTube editoriale di una testata: video del canale + trascrizioni Whisper.
+
+    Pattern:
+    1. Search YouTube Data API restricted to channelId, query brand+model variants
+    2. Filtro relevance su titolo+descrizione (brand + model_parts)
+    3. Per ogni video rilevante (top N): yt-dlp → audio → Whisper API → testo
+    4. Output items con `content`=trascrizione, ai_comments=None (commenti out-of-scope per pilota)
+    """
+    start = time.time()
+    name = source.get("name", "Unknown")
+    url = source.get("url", "")
+
+    channel_id = _resolve_editorial_channel_id(url)
+    if not channel_id:
+        return SourceResult(
+            source=name, source_type="youtube_editorial", status="error",
+            error=f"Canale YouTube non riconosciuto nel registry: {url}",
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    # Cap basso per il pilota: trascrivere è costoso (~$0.05-0.10/video) e lento.
+    MAX_VIDEOS_TO_TRANSCRIBE = 5
+
+    client = YouTubeClient()
+    try:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.utcnow() - timedelta(days=540)).strftime("%Y-%m-%dT00:00:00Z")
+        search_term = f"{brand} {model}".strip()
+
+        queries = [
+            f"{search_term} prova",
+            f"{search_term} recensione",
+            f"{search_term}",
+        ] if model else [search_term or brand]
+
+        all_videos: dict[str, dict] = {}
+        for query in queries:
+            results = await client.search_videos(
+                query, max_results=10, published_after=cutoff, channel_id=channel_id,
+            )
+            for item in results:
+                vid = item.get("id", {}).get("videoId")
+                if not vid or vid in all_videos:
+                    continue
+                snippet = item.get("snippet", {})
+                all_videos[vid] = {
+                    "title": snippet.get("title", ""),
+                    "description": snippet.get("description", ""),
+                    "channel": snippet.get("channelTitle", ""),
+                    "published_at": snippet.get("publishedAt", ""),
+                }
+
+        if not all_videos:
+            return SourceResult(
+                source=name, source_type="youtube_editorial", status="partial",
+                error=f"Nessun video trovato sul canale {name} per '{search_term}'",
+                duration_ms=int((time.time() - start) * 1000),
+            )
+
+        # Relevance filter: title o description deve menzionare brand o model_parts
+        brand_lower = brand.lower()
+        model_lower = (model or "").lower()
+        model_parts = model_lower.split() if model_lower else []
+        relevant: list[tuple[str, dict]] = []
+        for vid, meta in all_videos.items():
+            text = f"{meta['title'].lower()} {meta['description'][:500].lower()}"
+            has_brand = brand_lower in text
+            has_model = any(p in text for p in model_parts) if model_parts else False
+            if has_brand or has_model:
+                relevant.append((vid, meta))
+            else:
+                logger.warning(f"[{name}] Skipped irrelevant video: '{meta['title']}'")
+
+        if not relevant:
+            return SourceResult(
+                source=name, source_type="youtube_editorial", status="partial",
+                error=f"Nessun video rilevante per '{search_term}' tra i {len(all_videos)} trovati",
+                duration_ms=int((time.time() - start) * 1000),
+            )
+
+        # Cap per costi/tempo
+        relevant = relevant[:MAX_VIDEOS_TO_TRANSCRIBE]
+        logger.warning(f"[{name}] Trascrivendo {len(relevant)} video su {len(all_videos)} trovati")
+
+        # Statistiche video (view/like) — 1 chiamata batch
+        video_ids = [v for v, _ in relevant]
+        details = await client.get_video_details(video_ids)
+
+        # Download + transcribe ogni video. Sequenziale per non sovraccaricare CPU/banda.
+        items = []
+        for vid, meta in relevant:
+            audio_path = await _download_audio_for_whisper(vid, name)
+            if not audio_path:
+                # Persiamo il video con segnalazione: visibile all'utente in UI con scraped=false
+                items.append({
+                    "url": f"https://www.youtube.com/watch?v={vid}",
+                    "title": meta["title"],
+                    "channel": meta["channel"],
+                    "content": meta["description"][:500],
+                    "content_length": len(meta["description"][:500]),
+                    "scraped": False,
+                    "view_count": details.get(vid, {}).get("view_count", 0),
+                    "like_count": details.get(vid, {}).get("like_count", 0),
+                    "_transcription_error": "audio_download_failed",
+                })
+                continue
+
+            transcript = await _transcribe_audio_with_whisper(audio_path, vid, name)
+            if not transcript:
+                items.append({
+                    "url": f"https://www.youtube.com/watch?v={vid}",
+                    "title": meta["title"],
+                    "channel": meta["channel"],
+                    "content": meta["description"][:500],
+                    "content_length": len(meta["description"][:500]),
+                    "scraped": False,
+                    "view_count": details.get(vid, {}).get("view_count", 0),
+                    "like_count": details.get(vid, {}).get("like_count", 0),
+                    "_transcription_error": "whisper_failed",
+                })
+                continue
+
+            items.append({
+                "url": f"https://www.youtube.com/watch?v={vid}",
+                "title": meta["title"],
+                "channel": meta["channel"],
+                "content": transcript[:5000],
+                "_full_content": transcript,  # full version usato dall'AI cleanup
+                "content_length": len(transcript),
+                "scraped": True,
+                "view_count": details.get(vid, {}).get("view_count", 0),
+                "like_count": details.get(vid, {}).get("like_count", 0),
+            })
+
+        # AI cleanup: estrazione motore_info dalla trascrizione, stessa pipeline AlVolante.
+        # I commenti li lasciamo a None per il pilota (out-of-scope come da decisione).
+        await _clean_items_with_ai(items, name)
+        for item in items:
+            item.pop("_full_content", None)
+
+        return SourceResult(
+            source=name, source_type="youtube_editorial",
+            status="ok" if any(it.get("scraped") for it in items) else "partial",
+            result_count=len(items), credits_used=0, items=items,
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    except Exception as e:
+        logger.error(f"[{name}] YouTube editorial scrape error: {e}")
+        return SourceResult(
+            source=name, source_type="youtube_editorial", status="error",
             error=str(e), duration_ms=int((time.time() - start) * 1000),
         )
     finally:
