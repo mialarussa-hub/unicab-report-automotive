@@ -617,6 +617,13 @@ function renderResults(data, fromSession = false) {
         // Source cards inside the level
         const body = document.createElement('div');
         body.className = 'level-body';
+
+        // L2 minireport: card consolidata in cima alla sezione media/giornalisti
+        if (level.key === 'L2' && data.l2_synthesis && typeof data.l2_synthesis === 'object') {
+            const synthCard = renderL2SynthesisCard(data.l2_synthesis);
+            if (synthCard) body.appendChild(synthCard);
+        }
+
         for (const source of sources) {
             const card = createSourceCard(source, brandName);
             body.appendChild(card);
@@ -625,6 +632,77 @@ function renderResults(data, fromSession = false) {
 
         resultsContainer.appendChild(section);
     }
+}
+
+function renderL2SynthesisCard(synth) {
+    if (!synth || !synth.is_l2_synthesis) return null;
+    const tono = synth.tono_commenti_utenti || {};
+    const forza = Array.isArray(synth.giornalisti_punti_forza) ? synth.giornalisti_punti_forza : [];
+    const debolezza = Array.isArray(synth.giornalisti_punti_debolezza) ? synth.giornalisti_punti_debolezza : [];
+
+    const card = document.createElement('div');
+    card.className = 'source-card l2-synthesis-card';
+
+    const sentiment = (tono.sentiment_dominante || 'neutro').toLowerCase();
+    const sentimentClass = ['positivo', 'neutro', 'misto', 'critico'].includes(sentiment) ? sentiment : 'neutro';
+
+    const shortenUrl = (url) => {
+        try {
+            const u = new URL(url);
+            return u.hostname.replace(/^www\./, '') + (u.pathname.length > 30 ? u.pathname.slice(0, 30) + '...' : u.pathname);
+        } catch {
+            return (url || '').slice(0, 60);
+        }
+    };
+
+    const buildList = (items) => {
+        if (!items.length) return '<p class="synth-empty">Nessun tema ricorrente individuato nel pacchetto.</p>';
+        return '<ul class="synth-themes">' + items.map(t => {
+            const fonti = Array.isArray(t.fonti) ? t.fonti : [];
+            const fontiHtml = fonti.length
+                ? `<div class="synth-fonti">Fonti: ${fonti.map(f => `<a href="${escapeHtml(f)}" target="_blank" rel="noopener">${escapeHtml(shortenUrl(f))}</a>`).join(', ')}</div>`
+                : '';
+            return `<li>
+                <div class="synth-tema">${escapeHtml(t.tema || '')}</div>
+                <div class="synth-descr">${escapeHtml(t.descrizione || '')}</div>
+                ${fontiHtml}
+            </li>`;
+        }).join('') + '</ul>';
+    };
+
+    const note = synth.note_metodologiche
+        ? `<div class="synth-note"><strong>Note metodologiche:</strong> ${escapeHtml(synth.note_metodologiche)}</div>`
+        : '';
+
+    card.innerHTML = `
+        <div class="source-header">
+            <div class="source-title">
+                <span class="source-icon">📝</span>
+                <h3>Minireport L2 — Sintesi media e giornalisti</h3>
+                <span class="status-badge status-ok">Sintesi AI</span>
+            </div>
+        </div>
+        <div class="l2-synth-body">
+            <div class="synth-section">
+                <h4>Tono dei commenti utenti</h4>
+                <div class="synth-tono">
+                    <span class="synth-sentiment-badge sentiment-${sentimentClass}">${escapeHtml(tono.sentiment_dominante || 'neutro')}</span>
+                    <span class="synth-comment-count">${tono.n_commenti_analizzati || 0} commenti analizzati</span>
+                </div>
+                <p class="synth-descr">${escapeHtml(tono.descrizione || '')}</p>
+            </div>
+            <div class="synth-section">
+                <h4>Punti di forza secondo i giornalisti</h4>
+                ${buildList(forza)}
+            </div>
+            <div class="synth-section">
+                <h4>Punti di debolezza secondo i giornalisti</h4>
+                ${buildList(debolezza)}
+            </div>
+            ${note}
+        </div>
+    `;
+    return card;
 }
 
 function createSourceCard(source, brandName = '') {
