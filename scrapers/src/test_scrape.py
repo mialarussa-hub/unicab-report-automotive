@@ -1307,8 +1307,13 @@ async def _download_audio_for_whisper(video_id: str, source_name: str) -> str | 
         "--no-playlist",
         "--quiet",
         "--no-warnings",
-        f"https://www.youtube.com/watch?v={video_id}",
     ]
+    # Proxy residenziale Webshare: necessario perché YouTube blocca download
+    # dagli IP datacenter (es. Hetzner) con bot-detection. Test isolato confermato.
+    proxy_url = os.environ.get("WEBSHARE_PROXY_URL", "").strip()
+    if proxy_url:
+        cmd.extend(["--proxy", proxy_url])
+    cmd.append(f"https://www.youtube.com/watch?v={video_id}")
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
