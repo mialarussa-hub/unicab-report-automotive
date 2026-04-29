@@ -1274,7 +1274,9 @@ async def _scrape_youtube_source(brand: str, model: str, source: dict) -> Source
 #    caso non vale la migration.
 YOUTUBE_EDITORIAL_CHANNELS: dict[str, str] = {
     "@quattroruoteit": "UCQHfCaKLtI3LLCWec7s6p_A",
-    # Da aggiungere quando estenderemo: AlVolante, Motor1 Italia, DriveK
+    "@alvolante": "UCEmDaSQydEXeNHxSMkD7_Pw",
+    "@motor1italia": "UC3u7URxSqN70zuJ5Yb_ryPg",
+    "@drivekitalia": "UC8OSnuUszO3azYnEwrajPDw",
 }
 
 
@@ -1291,19 +1293,34 @@ def _resolve_editorial_channel_id(url: str) -> str | None:
 
 
 async def _download_audio_for_whisper(video_id: str, source_name: str) -> str | None:
-    """Scarica l'audio di un video YouTube come m4a in /tmp e ritorna il path.
+    """Scarica l'audio di un video YouTube nel formato più leggero possibile.
 
-    Usa yt-dlp con format 'bestaudio[ext=m4a]/bestaudio' per minimizzare la
-    dimensione (Whisper API ha cap a 25MB per file). Ritorna None su errore.
+    Whisper internamente ricampiona a 16kHz mono: scaricare audio HQ è inutile
+    e brucia bandwidth proxy (Webshare residenziale a consumo). Selezioniamo
+    lo stream webm/opus a bitrate più basso disponibile (~50-70 kbps, ~5 MB
+    per 15 min) invece di m4a 128 kbps (~25 MB per 15 min). Risparmio ~5×
+    sulla banda proxy senza degradare la qualità di trascrizione.
+
+    L'estensione del file viene determinata da yt-dlp (può essere .webm,
+    .m4a, .opus o altro a seconda di cosa fornisce YouTube): usiamo glob
+    per recuperare il file effettivo prodotto. Whisper accetta tutti questi
+    formati. Ritorna None su errore.
     """
-    import tempfile, subprocess
-    out_path = os.path.join(tempfile.gettempdir(), f"yt_{video_id}.m4a")
-    if os.path.exists(out_path):
-        os.remove(out_path)
+    import tempfile, glob
+    tmpdir = tempfile.gettempdir()
+    out_pattern = os.path.join(tmpdir, f"yt_{video_id}.%(ext)s")
+    # Cleanup di eventuali residui di esecuzioni precedenti
+    for f in glob.glob(os.path.join(tmpdir, f"yt_{video_id}.*")):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
     cmd = [
         "yt-dlp",
-        "-f", "bestaudio[ext=m4a]/bestaudio[abr<=128]/bestaudio",
-        "-o", out_path,
+        # Preferisce webm/opus a bitrate basso (~50-70 kbps, fortemente più
+        # leggero di m4a 128 kbps), con fallback m4a/qualunque audio-only.
+        "-f", "worstaudio[ext=webm]/bestaudio[ext=webm][abr<=70]/worstaudio[ext=m4a]/worstaudio",
+        "-o", out_pattern,
         "--no-playlist",
         "--quiet",
         "--no-warnings",
@@ -1324,11 +1341,24 @@ async def _download_audio_for_whisper(video_id: str, source_name: str) -> str | 
         if proc.returncode != 0:
             logger.warning(f"[{source_name}] yt-dlp failed for {video_id}: {stderr.decode()[:200]}")
             return None
-        if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+        # Trova il file effettivamente prodotto (estensione variabile)
+        produced = glob.glob(os.path.join(tmpdir, f"yt_{video_id}.*"))
+        if not produced:
+            logger.warning(f"[{source_name}] yt-dlp produced no output for {video_id}")
+            return None
+        out_path = produced[0]
+        if os.path.getsize(out_path) == 0:
             logger.warning(f"[{source_name}] yt-dlp produced empty file for {video_id}")
+            try:
+                os.remove(out_path)
+            except Exception:
+                pass
             return None
         size_mb = os.path.getsize(out_path) / (1024 * 1024)
-        logger.warning(f"[{source_name}] Downloaded audio for {video_id}: {size_mb:.1f} MB")
+        logger.warning(
+            f"[{source_name}] Downloaded audio for {video_id}: {size_mb:.1f} MB "
+            f"({os.path.basename(out_path)})"
+        )
         return out_path
     except asyncio.TimeoutError:
         logger.warning(f"[{source_name}] yt-dlp timeout for {video_id}")
@@ -1355,11 +1385,24 @@ async def _transcribe_audio_with_whisper(audio_path: str, video_id: str, source_
         logger.warning(f"[{source_name}] Audio for {video_id} exceeds 25MB ({size}B), skipping")
         return None
 
+    # Derive MIME type da estensione effettiva (può variare: webm, m4a, opus...)
+    ext = os.path.splitext(audio_path)[1].lstrip(".").lower() or "m4a"
+    mime_map = {
+        "webm": "audio/webm",
+        "m4a": "audio/m4a",
+        "mp3": "audio/mpeg",
+        "mp4": "audio/mp4",
+        "opus": "audio/ogg",
+        "ogg": "audio/ogg",
+        "wav": "audio/wav",
+    }
+    mime = mime_map.get(ext, "audio/mpeg")
+
     try:
         import httpx
         async with httpx.AsyncClient(timeout=300.0) as client:
             with open(audio_path, "rb") as f:
-                files = {"file": (f"{video_id}.m4a", f, "audio/m4a")}
+                files = {"file": (f"{video_id}.{ext}", f, mime)}
                 data = {
                     "model": "whisper-1",
                     "language": "it",
