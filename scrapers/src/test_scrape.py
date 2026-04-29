@@ -816,7 +816,14 @@ async def _scrape_news_motori_source(brand: str, model: str, source: dict) -> So
 
 
 async def _clean_items_with_ai(items: list[dict], source_name: str):
-    """Run Claude AI comment extraction on scraped items."""
+    """Run Claude AI comment extraction on scraped items.
+
+    NB: NON sovrascrive `ai_comments` se già popolato. Caso d'uso: YouTube
+    editoriale, dove i commenti arrivano dall'API YouTube (autoritativi) e
+    il `content` è la trascrizione del parlato. Senza questa guardia Claude,
+    interpretando la trascrizione come testo HTML, scambia frasi del parlato
+    per "commenti utenti" e sovrascrive i commenti veri con falsi positivi.
+    """
     logger.warning(f"[{source_name}] AI: cleaning {len(items)} pages")
     for item in items:
         # Use full content for parsing (not the truncated 5K version)
@@ -824,9 +831,16 @@ async def _clean_items_with_ai(items: list[dict], source_name: str):
         if item.get("scraped") and len(ai_content) > 200:
             cleaned = await clean_and_extract(ai_content, source_name, item["url"])
             if cleaned.get("cleaned") and cleaned.get("comments"):
-                item["ai_comments"] = cleaned["comments"]
-                item["ai_comment_count"] = cleaned["comment_count"]
-                logger.warning(f"[{source_name}] AI extracted {cleaned['comment_count']} comments from {item['url']}")
+                if item.get("ai_comments"):
+                    # Commenti già presenti (es. YouTube API): non sovrascrivere
+                    logger.warning(
+                        f"[{source_name}] Preserving {len(item['ai_comments'])} preexisting "
+                        f"comments for {item['url']} (skipping AI extraction)"
+                    )
+                else:
+                    item["ai_comments"] = cleaned["comments"]
+                    item["ai_comment_count"] = cleaned["comment_count"]
+                    logger.warning(f"[{source_name}] AI extracted {cleaned['comment_count']} comments from {item['url']}")
             elif cleaned.get("error"):
                 logger.warning(f"[{source_name}] AI error: {cleaned['error']}")
 
