@@ -787,7 +787,7 @@ async def analyze_communication_drivers(
 
 L2_MEDIA_SYNTHESIS_PROMPT = """Sei un analista che sintetizza la copertura editoriale media di un modello automobilistico.
 
-Ricevi un pacchetto di articoli editoriali pubblicati da testate giornalistiche italiane (riviste motori, rubriche motori dei quotidiani) su {brand} {model}. Ogni articolo include il testo dell'articolo e (quando disponibili) i commenti utenti pubblicati sotto l'articolo.
+Ricevi un pacchetto di contenuti editoriali pubblicati da testate giornalistiche italiane (riviste motori, rubriche motori dei quotidiani, canali YouTube ufficiali delle testate) su {brand} {model}. Ogni elemento include il testo del contenuto editoriale (articolo scritto OPPURE trascrizione automatica del parlato di un video editoriale, riconoscibile dall'URL youtube.com) e, quando disponibili, i commenti utenti pubblicati sotto l'articolo o sotto il video.
 
 COMPITO: produrre un minireport sintetico con tre sezioni distinte.
 
@@ -820,12 +820,12 @@ OUTPUT (restituisci ESATTAMENTE questa struttura, UN solo oggetto JSON):
 }}
 
 REGOLE FONDAMENTALI:
-1. **Punti di forza/debolezza**: identifica i temi RICORRENTI tra più articoli. Includi MASSIMO 5 temi per sezione, MINIMO 0 (lista vuota se non emergono temi solidi). Scarta i temi citati una sola volta.
-2. **fonti**: SOLO URL effettivamente presenti nel pacchetto, MAI inventati. Se un tema emerge da un solo articolo NON lo includere (regola di ricorrenza).
-3. **descrizione**: parafrasa, NON riportare quote testuali letterali. Sintesi, non traduzione.
-4. **tono_commenti_utenti.n_commenti_analizzati**: conteggio totale dei commenti utenti nei contenuti forniti (somma di tutti i blocchi "Commenti utenti").
+1. **Punti di forza/debolezza**: identifica i temi RICORRENTI tra più contenuti editoriali (articoli + video, trattati uniformemente). Includi MASSIMO 5 temi per sezione, MINIMO 0 (lista vuota se non emergono temi solidi). Scarta i temi citati una sola volta.
+2. **fonti**: SOLO URL effettivamente presenti nel pacchetto, MAI inventati. Se un tema emerge da un solo contenuto NON lo includere (regola di ricorrenza).
+3. **descrizione**: parafrasa, NON riportare quote testuali letterali. Sintesi, non traduzione. Le trascrizioni dei video possono contenere errori di riconoscimento vocale o intercalari del parlato: estrai il senso, non i dettagli letterali.
+4. **tono_commenti_utenti.n_commenti_analizzati**: conteggio totale dei commenti utenti nei contenuti forniti (somma di tutti i blocchi "Commenti utenti", inclusi quelli sotto i video YouTube).
 5. **sentiment_dominante**: scegli il valore che meglio rappresenta la maggioranza dei commenti utenti analizzati. Se i commenti sono troppo pochi (<5) o assenti, usa "neutro" e segnalalo in `descrizione`.
-6. NON confondere la voce dei giornalisti con quella degli utenti: i punti di forza/debolezza vanno estratti SOLO dal corpo degli articoli editoriali, non dai commenti.
+6. NON confondere la voce dei giornalisti con quella degli utenti: i punti di forza/debolezza vanno estratti SOLO dal corpo dei contenuti editoriali (articoli scritti e trascrizioni di video di giornalisti), non dai commenti del pubblico.
 7. Se il pacchetto è povero, lascia liste vuote con onestà — è preferibile a contenuto inventato.
 8. Restituisci SOLO il JSON, nessuna spiegazione, nessun markdown.
 

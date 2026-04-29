@@ -188,12 +188,14 @@ async def run_test_scrape(
             source_results.append(result)
             total_credits += result.credits_used
 
-    # L2 synthesis: aggrega tutti gli articoli L2 (source_type in {news, perplexity})
-    # in un minireport unico (tono utenti + plus/minus giornalisti). 1 chiamata Claude.
+    # L2 synthesis: aggrega tutti gli articoli L2 (news + perplexity + youtube_editorial)
+    # in un minireport unico. 1 chiamata Claude. Le trascrizioni dei video editoriali
+    # entrano come `content`, i commenti utenti come `ai_comments` — stessa struttura
+    # degli articoli web, la sintesi li tratta uniformemente.
     l2_synthesis = None
     l2_items: list[dict] = []
     for sr in source_results:
-        if sr.source_type in ("news", "perplexity") and sr.items:
+        if sr.source_type in ("news", "perplexity", "youtube_editorial") and sr.items:
             l2_items.extend(sr.items)
     if l2_items:
         from src.content_cleaner import analyze_l2_media_synthesis
@@ -1523,12 +1525,25 @@ async def _scrape_youtube_editorial_source(brand: str, model: str, source: dict)
         video_ids = [v for v, _ in relevant]
         details = await client.get_video_details(video_ids)
 
-        # Download + transcribe ogni video. Sequenziale per non sovraccaricare CPU/banda.
+        # Download + transcribe + commenti per ogni video. Sequenziale per non
+        # sovraccaricare CPU/banda. I commenti sono richiesti dal brief Paolo per
+        # alimentare la sezione "tono utenti" del minireport L2.
+        # Cap a 30 commenti per video: stesso cap usato dalla sintesi.
+        MAX_COMMENTS_PER_VIDEO = 30
         items = []
         for vid, meta in relevant:
+            # Fetch commenti utenti (chiamata API leggera, niente proxy/Whisper).
+            # Falliscono silenziosamente se i commenti sono disabilitati sul video.
+            yt_comments_raw = await client.get_comments(vid, max_results=MAX_COMMENTS_PER_VIDEO)
+            ai_comments = [
+                {"text": c.get("text", ""), "author": c.get("author", ""), "like_count": c.get("like_count", 0)}
+                for c in yt_comments_raw if (c.get("text") or "").strip()
+            ]
+
             audio_path = await _download_audio_for_whisper(vid, name)
             if not audio_path:
-                # Persiamo il video con segnalazione: visibile all'utente in UI con scraped=false
+                # Persiamo il video con segnalazione: visibile all'utente in UI con scraped=false.
+                # I commenti restano comunque utili per la sintesi L2 anche senza trascrizione.
                 items.append({
                     "url": f"https://www.youtube.com/watch?v={vid}",
                     "title": meta["title"],
@@ -1538,6 +1553,7 @@ async def _scrape_youtube_editorial_source(brand: str, model: str, source: dict)
                     "scraped": False,
                     "view_count": details.get(vid, {}).get("view_count", 0),
                     "like_count": details.get(vid, {}).get("like_count", 0),
+                    "ai_comments": ai_comments,
                     "_transcription_error": "audio_download_failed",
                 })
                 continue
@@ -1553,6 +1569,7 @@ async def _scrape_youtube_editorial_source(brand: str, model: str, source: dict)
                     "scraped": False,
                     "view_count": details.get(vid, {}).get("view_count", 0),
                     "like_count": details.get(vid, {}).get("like_count", 0),
+                    "ai_comments": ai_comments,
                     "_transcription_error": "whisper_failed",
                 })
                 continue
@@ -1567,10 +1584,10 @@ async def _scrape_youtube_editorial_source(brand: str, model: str, source: dict)
                 "scraped": True,
                 "view_count": details.get(vid, {}).get("view_count", 0),
                 "like_count": details.get(vid, {}).get("like_count", 0),
+                "ai_comments": ai_comments,
             })
 
         # AI cleanup: estrazione motore_info dalla trascrizione, stessa pipeline AlVolante.
-        # I commenti li lasciamo a None per il pilota (out-of-scope come da decisione).
         await _clean_items_with_ai(items, name)
         for item in items:
             item.pop("_full_content", None)
