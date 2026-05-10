@@ -53,3 +53,6 @@ htmlcov/
 backend/alembic/versions/__pycache__/
 Credentials.txt
 .claude/
+
+# PM private sources (call notes, mails, internal docs — never commit)
+pm/sources/
