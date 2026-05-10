@@ -9,12 +9,16 @@ operandi_ standard. In dubbio, segui queste prima di improvvisare.
 
 Ogni volta che apri una nuova conversazione con l'utente:
 
-1. Leggi `pm/pm-agent/ROLE.md` — refresh dei confini
-2. Leggi `pm/pm-agent/ROUTINES.md` — questo file
-3. Leggi `pm/pm-agent/FEEDBACK.md` — eventuali messaggi da Claude Code
-4. Leggi `pm/SPRINT.md` — sprint corrente
-5. Leggi i top 10 di `pm/DONE.md` — contesto recente
-6. Se ci sono handoff aperti in `pm/pm-agent/handoff-*.md`, leggili
+1. **Suggerisci di sincronizzare**: di' all'utente "Prima di iniziare,
+   se hai una sessione di Claude Code aperta, chiedigli un `git pull`
+   così leggo `pm/` aggiornato". (Se l'utente conferma di averlo già
+   fatto o di non averne bisogno, procedi.)
+2. Leggi `pm/pm-agent/ROLE.md` — refresh dei confini
+3. Leggi `pm/pm-agent/ROUTINES.md` — questo file
+4. Leggi `pm/pm-agent/FEEDBACK.md` — eventuali messaggi da Claude Code
+5. Leggi `pm/SPRINT.md` — sprint corrente
+6. Leggi i top 10 di `pm/DONE.md` — contesto recente
+7. Se ci sono handoff aperti in `pm/pm-agent/handoff-*.md`, leggili
 
 Saluto tipico:
 > "Ciao Ale. Siamo allo sprint del [data], P0 attivi: [lista]. C'è un
@@ -120,6 +124,39 @@ Se all'inizio sessione trovi un messaggio in
 
 ---
 
+## 🔄 Sync con Claude Code (git)
+
+Tu non sai usare git. Te ne deve occupare l'utente, che a sua volta
+chiede a Code. Quindi le tue routine "di sincronizzazione" sono
+**verbali**: dici all'utente cosa serve, lui inoltra a Code.
+
+### Quando hai appena finito di scrivere in `pm/`
+Avvisa l'utente con una frase chiara:
+> "Ho aggiornato `pm/SPRINT.md` (nuovo P0 'fix login') e creato
+> `pm/pm-agent/handoff-2026-05-10-a-fix-login.md`. Quando vuoi,
+> chiedi a Claude Code di pushare le modifiche."
+
+Specifica **quali file** hai toccato — Code ha bisogno di saperlo per
+fare il commit pulito (con prefisso `pm:`).
+
+### Quando vuoi essere sicuro di leggere lo stato più recente
+Esempio: torna l'utente dopo 3 giorni e ti chiede "dove siamo".
+Prima di rispondere, di':
+> "Per essere certo di leggere `pm/` aggiornato, se hai una sessione
+> di Code aperta chiedigli un `git pull`. Poi rispondo."
+
+Se l'utente conferma di non avere modifiche pending o ti dice di
+procedere comunque, vai.
+
+### Quando Code ti scrive in `FEEDBACK.md`
+Vuol dire che Code ha già pushato e l'utente ha già pullato (o lavora
+nello stesso filesystem dove Code ha appena scritto). Non serve sync
+da parte tua, leggi e rispondi normalmente. Quando rispondi in
+FEEDBACK, ricorda all'utente di chiedere a Code di pushare la tua
+risposta se serve farla arrivare ad altre sessioni/server.
+
+---
+
 ## 🧹 Manutenzione periodica
 
 A fine sprint (o ogni 1-2 settimane):
@@ -130,3 +167,6 @@ A fine sprint (o ogni 1-2 settimane):
 3. Aggiorna `ROADMAP.md` se sono cambiate le milestone
 4. Archivia handoff vecchi (>30 giorni) in `pm/pm-agent/handoff-archive/`
    se non lo sono già
+
+Tutte queste modifiche → **avvisa l'utente che servirà un push da
+parte di Code** (vedi sezione "Sync con Claude Code" sopra).
