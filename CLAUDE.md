@@ -155,5 +155,102 @@ git push
 
 ## Note tecniche del progetto
 
-_(spazio per convenzioni di codice, comandi frequenti, gotcha specifici
-del repo. Da popolare nel tempo.)_
+### Cosa fa UNICAB
+
+Piattaforma di **intelligence editoriale e social per il mercato
+automotive italiano**. Per un dato modello di auto, raccoglie e
+analizza:
+
+- **News editoriali** (testate auto + generaliste con sezione motori)
+- **Video editoriali YouTube** (canali professional, con trascrizione
+  audio via Whisper e scraping commenti)
+- **Conversazioni social** (Reddit principalmente, con cliente per
+  Arctic Shift)
+- **Advertising** (Facebook Ads Library, Google Ads)
+- **Specifiche modello** (scraper "motore")
+
+Output: **report e minireport AI** (sintesi per modello, sintesi
+media/giornalisti, analisi sentiment) consultabili in dashboard via
+unicab.automica.it.
+
+### Architettura — vista a volo d'uccello
+
+| Componente | Path | Stack | Ruolo |
+|---|---|---|---|
+| API + report engine | `backend/` | Python (FastAPI), pydantic-settings, SQLAlchemy + Alembic | Endpoint REST, orchestrazione report, sentiment, adv, sources, timesheet |
+| Scrapers | `scrapers/` | Python | Reddit, YouTube (yt-dlp + Whisper + commenti), news (Firecrawl 2-step search→scrape), Facebook/Google Ads, Perplexity client (standby), motore (specs auto) |
+| Frontend | `frontend/` | Templates + static (server-side render via API) | Dashboard report viewer + admin (Test Scraping, timesheet) |
+| Workflow automation | `n8n/` | n8n | Orchestrazione job ricorrenti, schedulazione scraping/report |
+| Reverse proxy | `nginx/` | nginx | TLS, routing API/n8n |
+| DB | container `db` | Postgres 15 + **pgvector** | Persistenza, embeddings sentiment |
+| AI | — | Anthropic Claude | Sintesi report/minireport, sentiment classification, content cleaning |
+
+Tutto orchestrato via **Docker Compose** (`docker-compose.yml`).
+
+### Modelli DB (alto livello)
+
+In `backend/app/models/`: `user`, `source`, `scraping`, `report`,
+`sentiment`, `adv`, `activity`. Migrazioni Alembic in
+`backend/alembic/`.
+
+> **Attenzione (da memoria):** Alembic in produzione **non** è
+> affidabile. Per modifiche schema in prod, usare **psql diretto** per
+> DDL. Vedi `pm/ops/DEPLOY.md`.
+
+### Pipeline L1 / L2
+
+- **L1** (produttivo) — pipeline base di ingest + report standard.
+- **L2** (in espansione) — minireport AI per modello con sintesi
+  media/giornalisti per sessione. Fonti L2 attive (al 2026-05-10):
+  - **News editoriali (8):** AlVolante, Quattroruote, Corriere
+    Motori, Repubblica, La Stampa, Gazzetta, Corriere della Sera
+    Motori, Motor1.it
+  - **YouTube editoriali (3):** AlVolante, Motor1 Italia, DriveK
+    (trascrizione Whisper + scraping commenti video)
+- **Perplexity (Sonar)** — implementato in main, **UI nascosta** in
+  attesa di API key. Per riattivarlo: aggiungere `PERPLEXITY_API_KEY`
+  + reinserire l'option nel dropdown.
+
+### Infrastruttura
+
+- **Server prod:** Hetzner CX33
+- **URL pubblico:** https://unicab.automica.it
+- **Deploy SSH:** `ssh -p 2222 unicab@46.225.147.176`
+  - ⚠️ **MAI** usare `root`, porta `22`, hostname o IP `49.13.11.137`
+- **Proxy yt-dlp:** Webshare (per superare ban YouTube datacenter)
+
+### Convenzioni / gotchas noti
+
+- **Filtro temporale ricerche Google:** `tbs=qdr:y` (ultimo anno)
+- **Reddit:** preferire **Arctic Shift** all'API ufficiale per
+  storico
+- **News scrapers:** strategia **2-step (search → scrape)**, non
+  scrape diretto
+- **Rilevanza:** fallback **brand-only** se modello non matcha;
+  `versioni=[]` → considerato pertinente; `cilindrata=null` tollerata
+- **Sentiment:** elaborazione **batch**, no item-by-item
+- **YouTube:** canali senza prefisso `@channel`
+- **AI cleaning:** `_clean_items_with_ai` **non** deve sovrascrivere
+  `ai_comments` preesistenti (fix recente, vedi commit `03ba38d`)
+- **Container env:** per cambi env vars usare **force-recreate**, non
+  semplice restart
+
+### Comandi frequenti (locali)
+
+```bash
+# Avvio stack dev
+docker compose -f docker-compose.dev.yml up -d
+
+# Log API
+docker compose logs -f api
+
+# Migrazione (solo in dev — in prod psql diretto)
+docker compose exec api alembic upgrade head
+```
+
+### Riferimenti
+
+- **Documenti progetto:** `Docs/UNICAB_Kickoff_v2.pdf`,
+  `Docs/UNICAB_Proposta_Infrastruttura.docx`,
+  `Docs/Progetto Unicab - Report AI Automotive.pdf`
+- **PM:** vedi `pm/` (entry point: `pm/README.md`)
