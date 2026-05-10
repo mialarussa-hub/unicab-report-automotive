@@ -20,4 +20,16 @@
 
 ## Log
 
-_(vuoto — i nuovi item vanno **in cima**, sopra questa riga)_
+### 2026-05-10 — Setup struttura PM coordinata Cowork/Code
+- **Sprint:** —
+- **Esecutore:** Claude Code (su input utente)
+- **Outcome:** creata `pm/` come single source of truth PM, scritto
+  `CLAUDE.md` con mappa tecnica, codificato workflow di sync git
+  (PM AI lavora locale, Code è l'unico operatore git), allargati
+  permessi di lettura PM a `Docs/` e `CLAUDE.md`, popolato
+  `pm/projects/00-stato-progetto.md` come brief operativo iniziale.
+- **Note / link:** PR [#1](https://github.com/mialarussa-hub/unicab-report-automotive/pull/1)
+  (struttura base) + PR [#2](https://github.com/mialarussa-hub/unicab-report-automotive/pull/2)
+  (workflow sync git). Terza PR per popolamento contesto in arrivo.
+
+_(i nuovi item vanno **in cima**, sopra questa riga)_
