@@ -20,6 +20,12 @@
 
 ## Log
 
+### 2026-05-10 — Popolamento iniziale PM (sprint 19-20, scope Release 0.0)
+- **Sprint:** kickoff sprint 19-20 (11-24 maggio)
+- **Esecutore:** PM AI (su input Ale, prima sessione PM)
+- **Outcome:** popolati `pm/SPRINT.md` (3 P0, 3 P1, 3 P2), `pm/BACKLOG.md` (4 desiderate post-prototipo), creato `pm/projects/release-0-0-prototipo.md` con scope distillato dalla call Paolo 4/5, aggiunta nota di de-prioritizzazione L1 in `pm/projects/00-stato-progetto.md`. Creata cartella `pm/sources/` con sintesi call 4/5 + README convenzioni; cartella da gitignore (handoff aperto per Code).
+- **Note / link:** handoff `pm/pm-agent/handoff-2026-05-10-a-gitignore-pm-sources.md` da eseguire PRIMA del primo `git add pm/`. Modello PM ↔ Ale validato in pratica (proporre → confermare → scrivere → avvisare per push).
+
 ### 2026-05-10 — Setup struttura PM coordinata Cowork/Code
 - **Sprint:** —
 - **Esecutore:** Claude Code (su input utente)
