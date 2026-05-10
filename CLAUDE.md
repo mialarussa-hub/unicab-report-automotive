@@ -64,9 +64,71 @@ Procedura:
 
 Quando apri una nuova sessione, prima di lavorare leggi nell'ordine:
 
-1. **`pm/pm-agent/FEEDBACK.md`** — eventuali messaggi dal PM
-2. **`pm/SPRINT.md`** — task della settimana e priorità correnti
-3. **Eventuali handoff** linkati nelle note di SPRINT (`pm/pm-agent/handoff-*.md`)
+1. **`git pull --ff-only`** — sincronizza con il remoto (vedi sezione "Sync git" sotto)
+2. **`pm/pm-agent/FEEDBACK.md`** — eventuali messaggi dal PM
+3. **`pm/SPRINT.md`** — task della settimana e priorità correnti
+4. **Eventuali handoff** linkati nelle note di SPRINT (`pm/pm-agent/handoff-*.md`)
+
+---
+
+### 🔄 Sync git con il PM AI (CRITICO)
+
+**Il PM AI in Cowork lavora sul filesystem locale ma NON sa usare git.**
+Modifica i file in `pm/` direttamente. Tu sei l'unico che committa e
+sincronizza con il remoto. Questo significa che **il git diventa
+responsabilità tua** anche per le modifiche del PM.
+
+#### Quando l'utente dice "pusha le modifiche del PM"
+
+Il PM ha appena modificato qualcosa in `pm/` (in Cowork) e l'utente
+vuole che il cambiamento finisca su GitHub.
+
+```bash
+git status                    # vedi cosa il PM ha toccato
+git add pm/                   # SOLO pm/, mai aggiungere file fuori
+git diff --cached             # rileggi prima di committare
+git commit -m "pm: <descrizione di cosa ha fatto il PM>"
+git push
+```
+
+**Convenzione commit message:**
+- Modifiche fatte dal PM AI → prefisso **`pm:`** (es. `pm: aggiungi 3 task P0 per sprint settimana 19`)
+- Modifiche fatte da te (Claude Code) come conseguenza tecnica → prefisso **`chore(pm):`** (es. `chore(pm): mark task 'fix login' as done`)
+
+In entrambi i casi, **se hai toccato anche codice nello stesso ciclo
+di lavoro, fai due commit separati**: uno `pm:` e uno per il codice.
+Non mischiare.
+
+#### Quando stai per scrivere in `pm/` (specie `FEEDBACK.md`)
+
+Prima di modificare qualunque file in `pm/`, **fai sempre `git pull
+--ff-only`** per non sovrascrivere modifiche del PM avvenute nel
+frattempo (es. da un'altra sessione su un altro device, o se il PM
+sta lavorando in parallelo).
+
+```bash
+git pull --ff-only            # se fallisce, c'è conflitto: chiedi all'utente
+# ...modifichi pm/...
+git add pm/
+git commit -m "chore(pm): <cosa hai fatto>"
+git push
+```
+
+#### Riassunto del flusso
+
+| Scenario | Chi modifica | Tu fai |
+|---|---|---|
+| PM in Cowork modifica `pm/SPRINT.md` | PM AI (in locale) | Su richiesta utente: `add` + commit `pm: ...` + push |
+| PM scrive nuovo handoff `pm/pm-agent/handoff-*.md` | PM AI | Idem |
+| Tu chiudi un task tecnico → ✅ in SPRINT, append in DONE | Tu | `pull` → modifica → commit `chore(pm): ...` → push |
+| Tu rispondi al PM in `pm/pm-agent/FEEDBACK.md` | Tu | `pull` → modifica → commit `chore(pm): feedback to PM about X` → push |
+| Tu sposti handoff completato in archive | Tu | `pull` → `git mv` → commit `chore(pm): archive handoff X` → push |
+| Tu modifichi codice (`backend/`, `src/`, ecc.) | Tu | flusso normale, mai mischiato con commit `pm:` |
+
+#### Gotcha
+- **Mai `git add .` o `git add -A`** quando il PM ha modificato `pm/`: rischi di trascinare file di codice non pronti. Usa sempre `git add pm/`.
+- **Se `git pull --ff-only` fallisce**: c'è un commit divergente. Non fare `git pull` senza flag (rebase/merge). Fermati e chiedi all'utente.
+- **Cowork non vede commit/branch**: per Cowork esistono solo i file nel filesystem locale. Se hai pushato qualcosa di rilevante per il PM, l'utente deve dirgli "rileggi `pm/...`" — non c'è notifica automatica.
 
 ### Tabella riferimento veloce — file `pm/`
 

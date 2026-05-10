@@ -64,6 +64,12 @@ prende una decisione architetturale esplicita.
    `SPRINT.md`. A completamento → `pm/pm-agent/handoff-archive/`.
 5. **`FEEDBACK.md` è bidirezionale**. Si legge a inizio sessione, sia
    dal PM che da Claude Code.
+6. **Il PM AI non sa usare git**. Lavora sul filesystem locale. Il
+   sync con il remoto (push/pull) lo fa **solo** Claude Code. Quando
+   il PM modifica `pm/`, l'utente deve chiedere a Code di pushare;
+   quando il PM vuole leggere lo stato aggiornato, l'utente chiede a
+   Code di pullare prima. Vedi `CLAUDE.md` (sezione "Sync git con
+   il PM AI") per la procedura lato Code.
 
 ---
 
