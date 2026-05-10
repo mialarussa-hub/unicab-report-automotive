@@ -9,6 +9,13 @@
 **Ultimo aggiornamento:** 2026-05-10
 **Aggiornato da:** Claude Code
 
+> **Nota 2026-05-10 (PM):** in call con Paolo del 2026-05-04, **L1 (siti case
+> auto) è de-prioritizzato per la Release 0.0 prototipo**. L1 resta in
+> produzione, ma il focus prototipo è **L2 + L3 + L4**. Lo scope completo
+> della Release 0.0 (in/out, vincoli, pending Paolo, sensibilità) vive in
+> [`release-0-0-prototipo.md`](release-0-0-prototipo.md). Il resto di questo
+> file resta come fotografia tecnica di stato — non riscritto.
+
 ---
 
 ## In una riga
