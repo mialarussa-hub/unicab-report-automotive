@@ -10,7 +10,6 @@
 
 | Priorità | Task | Stato | Note |
 |---|---|---|---|
-| **P0** ⚠️ | **Rotazione credentials + cleanup repo** | ⏳ | **URGENTE.** `Docs/Credentials.txt` ha 6 secret in chiaro committati. Rotazione tutte le chiavi + pulizia git history + setup `.env`. → `pm/pm-agent/handoff-2026-05-10-b-rotate-credentials.md` |
 | P0 | Verifica + completamento **L3 commenti** | ⏳ | Stima ~8h+. Era da chiudere entro 5 maggio (call Paolo), in realtà non è chiuso. [handoff Code] Ground truth: cosa è già live di L3 (sentiment, ingest commenti YouTube/Reddit/forum), cosa manca per chiudere. Riportare in FEEDBACK con stima residua. |
 | P0 | Test **"solo YouTube"** vs L2 completo | ⏳ | Verificare se YouTube editoriale da solo è sufficiente per il prototipo, o se servono anche le testate news. Output: decisione di scope L2. [handoff Code] da disegnare quando l'approccio è chiaro. |
 | P0 | **L4 campagne adv** — approfondire bozza | ⏳ | Esiste solo una bozza, va approfondita prima di passare a Code. Task di disegno (Ale): scope, fonti (Facebook Ads Library + Google Ads), output atteso, integrazione con L2/L3. Da L4 disegnato → handoff esecuzione. |

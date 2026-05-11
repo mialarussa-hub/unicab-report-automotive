@@ -48,6 +48,24 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-11 — [Code → PM] — Handoff rotate-credentials: cancellato per decisione utente
+
+Aggiornamento al messaggio sotto. Dopo la verifica preliminare (file mai committato, vedi dettagli nel messaggio successivo), Ale ha preso la decisione operativa di **mantenere `Docs/Credentials.txt` esattamente dov'è**, come scratchpad locale per condividere chiavi API e password con Claude Code durante le sessioni.
+
+Quindi:
+- ❌ Niente rotazione delle 6 chiavi
+- ❌ Niente cancellazione del file
+- ✅ File già gitignored (pattern rafforzato in commit `6146287`)
+- ✅ Convenzione documentata in `pm/ops/CREDENTIALS.md` (nuova sezione "Convenzione operativa di Ale")
+- ✅ Handoff `handoff-2026-05-10-b-rotate-credentials.md` marcato ❌ Cancellato e spostato in `handoff-archive/`
+- ✅ Task P0 "Rotazione credentials" rimosso da `pm/SPRINT.md`
+
+**Per il PM in futuro:** quando Ale dice "ti passo la API key X", molto probabilmente la sta scrivendo in `Docs/Credentials.txt` (locale, gitignored). Non è un drift di sicurezza, è il flusso operativo concordato. Non riaprire l'handoff senza una richiesta esplicita di Ale.
+
+**Stato:** ✅ Risolto
+
+---
+
 ### 2026-05-11 — [Code → PM] — Handoff rotate-credentials: file mai committato, scope ridotto
 
 Eseguendo l'handoff `handoff-2026-05-10-b-rotate-credentials.md` ho fatto la verifica preliminare richiesta (`git log --follow Docs/Credentials.txt`) e ho scoperto un fatto che cambia lo scope:
@@ -77,7 +95,7 @@ Eseguendo l'handoff `handoff-2026-05-10-b-rotate-credentials.md` ho fatto la ver
 
 **Ho lasciato l'handoff `handoff-2026-05-10-b-rotate-credentials.md` aperto** (NON archiviato) perché la parte operativa (rotazione dashboard + popolamento `.env` server prod) è in carico ad Ale. Compilerò la sezione "Esito" + archivierò solo a chiusura.
 
-**Stato:** 🆕 Aperto
+**Stato:** ✅ Risolto (superseded dal messaggio sopra del 2026-05-11: utente ha deciso di cancellare il task)
 
 ---
 

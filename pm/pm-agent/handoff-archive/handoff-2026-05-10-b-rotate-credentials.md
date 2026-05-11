@@ -5,7 +5,7 @@
 **A:** Claude Code
 **Priorità:** **P0 (urgente)**
 **Stima rough:** M (1-4h)
-**Stato:** 🆕 Nuovo
+**Stato:** ❌ Cancellato (decisione utente 2026-05-11 — vedi sezione Esito)
 
 ---
 
@@ -86,21 +86,23 @@ Nessun segreto nel repo (HEAD né history), tutte le chiavi ruotate, credenziali
 
 ---
 
-## 📤 Esito (da compilare da Claude Code a fine task)
+## 📤 Esito
 
-**Esito:** ✅ / ❌
-**Cosa è stato fatto:**
-- ...
+**Esito:** ❌ Cancellato dall'utente (decisione 2026-05-11)
 
-**File modificati:**
-- ...
+**Verifiche tecniche fatte prima della cancellazione:**
+- `Docs/Credentials.txt` non è mai stato committato. `git log --all --diff-filter=A -- Docs/Credentials.txt` ritorna vuoto. Il file è già coperto da `.gitignore` (regola `Credentials.txt` originaria, ora rafforzata dai pattern `**/Credentials*` e `**/credentials*`).
+- Premessa dell'handoff ("6 secret in chiaro committati nel repo") era errata: i secret sono solo sul filesystem locale di Ale, mai esposti via git.
+- Perplexity confermata **attiva** in L1 Strato B (`scrapers/src/perplexity_client.py` + `_scrape_official_perplexity` in `test_scrape.py:1667`).
+- OpenAI confermata **attiva** in L2 (`_transcribe_audio_with_whisper` in `test_scrape.py:1394`, Whisper API per audio YouTube editoriale).
 
-**Commit:** `<hash>` _o_ "non committato, vedi diff"
+**Decisione utente (2026-05-11):**
+Ale ha deciso di **mantenere `Docs/Credentials.txt` dov'è**, come scratchpad locale per condividere chiavi API e password con Claude Code durante le sessioni. Il file è già gitignored e non viene committato. Niente rotazione delle 6 chiavi, niente cancellazione del file. La convenzione è documentata in `pm/ops/CREDENTIALS.md` (sezione "Convenzione operativa di Ale").
 
-**Note per il PM:**
-- Perplexity confermata attiva / non attiva?
-- OpenAI confermata attiva / non attiva?
-- Eventuali altri segreti trovati durante la pulizia che non erano in `Credentials.txt`?
+**Cosa resta in repo dai commit della sessione (utile comunque):**
+- `.gitignore` con pattern aggressivi `**/Credentials*`, `**/credentials*`, `*.secret` (commit `6146287`)
+- `.env.example` completato con i 6 nomi-chiave finora mancanti (commit `6146287`)
+- `pm/ops/CREDENTIALS.md` popolato con l'inventario reale (no rotazione, no placeholder)
 
-**Follow-up emersi:**
-- ...
+**Follow-up emersi (bassa priorità, non urgenti):**
+- Login demo Paolo (`p.brunetti@excellgo.com` / `Unicab`): password debole condivisa via mail in chiaro. Scope limitato (solo dashboard demo). Valutare quando opportuno.

@@ -8,44 +8,35 @@
 
 ---
 
-## ⚠️ ALLERTA IN CORSO — credentials leak nel repo
+## Convenzione operativa di Ale
 
-Al 2026-05-10 è stato individuato che **`Docs/Credentials.txt` contiene 6 secret in chiaro committati nel repo git** (anche se privato). Vedi handoff aperto P0:
-`pm/pm-agent/handoff-2026-05-10-b-rotate-credentials.md`
+`Docs/Credentials.txt` è uno **scratchpad locale** di Ale per
+condividere comodamente chiavi API e password con Claude Code durante
+le sessioni di sviluppo. È **gitignored** (pattern `**/Credentials*`
+in `.gitignore`) e non è mai stato committato in nessun branch.
+**Convenzione confermata da Ale (2026-05-11): il file resta dov'è.**
 
-Le chiavi compromesse (DA RUOTARE) sono:
-1. Firecrawl API
-2. Anthropic Claude API
-3. YouTube Data API v3
-4. **Perplexity API** (con buona pace della nota "in attesa API key cliente" — la key c'è ed è in uso in L1 Strato B)
-5. OpenAI API
-6. Webshare proxy (username + password)
-
-Dopo rotazione lato Code, questa tabella va popolata con i nuovi "dove".
-
----
-
-## Convenzione
-
-| Servizio | Tipo credenziale | Dove si trova | Owner | Note |
-|---|---|---|---|---|
-| _esempio_ | API key | `.env` server prod (`/home/unicab/...`) | Ale | rotazione manuale |
-| _esempio_ | DB password | 1Password / vault | Ale | — |
+Implicazioni:
+- I valori reali delle chiavi non vivono in `pm/ops/` né in nessun
+  altro file versionato — restano in `Docs/Credentials.txt` (locale) +
+  `.env` (server prod + locale Ale, anch'essi gitignored).
+- Questa tabella sotto contiene solo i puntatori "dove" — niente
+  valori.
 
 ---
 
-## Inventario corrente (post-rotazione, da compilare da Code)
+## Inventario corrente
 
 ### API esterne
 
-| Servizio | Tipo credenziale | Dove si trova (target) | Owner | Note |
+| Servizio | Tipo credenziale | Dove si trova | Owner | Note |
 |---|---|---|---|---|
-| Firecrawl | API key | _da definire post-rotazione_ | Ale | usato negli scraper news (2-step search→scrape) |
-| Anthropic Claude | API key | _da definire post-rotazione_ | Ale | sentiment + minireport L2 + aggregazione L1 |
-| YouTube Data API v3 | API key | _da definire post-rotazione_ | Ale | commenti video, ricerca canali, metadati |
-| Perplexity Sonar Pro | API key | _da definire post-rotazione_ | Ale | L1 Strato B (web esteso) |
-| OpenAI | API key | _da definire post-rotazione_ | Ale | uso da chiarire (Whisper? altro?) — verificare con Code |
-| Webshare proxy | username + password | _da definire post-rotazione_ | Ale | proxy residenziale per yt-dlp (ban YouTube datacenter) |
+| Firecrawl | API key | `Docs/Credentials.txt` (locale Ale) + `.env` server prod | Ale | usato negli scraper news (2-step search→scrape) |
+| Anthropic Claude | API key | `Docs/Credentials.txt` (locale Ale) + `.env` server prod | Ale | sentiment + minireport L2 + aggregazione L1 |
+| YouTube Data API v3 | API key | `Docs/Credentials.txt` (locale Ale) + `.env` server prod | Ale | commenti video, ricerca canali, metadati |
+| Perplexity Sonar Pro | API key | `Docs/Credentials.txt` (locale Ale) + `.env` server prod | Ale | **attiva** in L1 Strato B (web ufficiale esteso) |
+| OpenAI | API key | `Docs/Credentials.txt` (locale Ale) + `.env` server prod | Ale | Whisper API per trascrizione audio YouTube editoriale L2 |
+| Webshare proxy | username + password | `Docs/Credentials.txt` (locale Ale) + `.env` server prod (`WEBSHARE_PROXY_URL`) | Ale | proxy residenziale per yt-dlp (ban YouTube datacenter) |
 
 ### Server e infrastruttura
 
@@ -53,14 +44,14 @@ Dopo rotazione lato Code, questa tabella va popolata con i nuovi "dove".
 |---|---|---|---|---|
 | Hetzner Cloud (account) | login | gestito da UNICAB Italia | UNICAB | account intestato a UNICAB Italia SRL; Ale è "Member" del progetto, accesso revocabile |
 | SSH server prod | chiave privata Ed25519 | macchina Ale (`~/.ssh/id_ed25519`) | Ale | chiave pubblica caricata su Hetzner; comando: `ssh -p 2222 unicab@46.225.147.176` |
-| Postgres prod | password | _da chiarire con Code_ | Ale | accesso via Docker container/env |
-| n8n self-hosted | login | _da chiarire con Code_ | Ale | accesso protetto via VPN WireGuard |
+| Postgres prod | password | `.env` server prod (`POSTGRES_PASSWORD`) | Ale | accesso via Docker container |
+| n8n self-hosted | login | `.env` server prod (`N8N_BASIC_AUTH_*`) | Ale | accesso protetto via VPN WireGuard |
 
 ### Piattaforma unicab.automica.it (demo / produzione)
 
-| Utente | Password | Note | Stato |
-|---|---|---|---|
-| `p.brunetti@excellgo.com` | `Unicab` | login demo Paolo, condivisa via mail in chiaro (2026-04-22 e 2026-04-29) | **DA RIVALUTARE**: password debole, condivisa via canale insicuro. Ale ha confermato è ancora attiva (2026-05-11). Considerare rotazione a una password forte + canale sicuro (1Password share, signal, ecc.). |
+| Utente | Note | Stato |
+|---|---|---|
+| `p.brunetti@excellgo.com` | login demo Paolo, condivisa via mail in chiaro (2026-04-22 e 2026-04-29) | ancora attiva (2026-05-11). Bassa priorità: password debole + canale condivisione insicuro, ma scope limitato (solo dashboard demo). Valutare con Ale se ruotare/cambiare canale. |
 
 ### Dominio e DNS
 
@@ -73,7 +64,10 @@ Dopo rotazione lato Code, questa tabella va popolata con i nuovi "dove".
 ## Procedure
 
 ### Aggiungere una nuova credenziale
-1. Salvare il segreto **fuori dal repo** (env server, secret manager, password manager).
+1. Salvare il segreto **fuori dai file versionati** — opzioni:
+   - `Docs/Credentials.txt` (locale Ale, gitignored) per scratchpad
+     condiviso con Claude Code
+   - `.env` (locale + server prod) per uso a runtime
 2. Aggiungere una riga nella tabella sopra **descrivendo solo dove**.
 3. Se è una env var: aggiornare `.env.example` con la chiave (senza valore).
 
@@ -81,13 +75,10 @@ Dopo rotazione lato Code, questa tabella va popolata con i nuovi "dove".
 - Annotare data ultima rotazione nelle note.
 - Per credenziali condivise, comunicare al team prima della rotazione.
 
-### Mai mettere in `Docs/` o in altro file versionato
-Tutto il segreto va in `.env` (con `.env` in `.gitignore`) o in un secret manager esterno. Il file `Docs/Credentials.txt` è stato la causa dell'incidente del 2026-05-10 e non deve ricomparire.
-
 ---
 
 ## Riferimenti
 
-- Handoff rotazione: `pm/pm-agent/handoff-2026-05-10-b-rotate-credentials.md`
-- Promessa contrattuale violata: `pm/sources/2026-03-27-doc-proposta-infrastruttura.md` (sezione Sicurezza: *"Tutte le API key gestite come variabili d'ambiente cifrate. Nessuna credenziale in chiaro su filesystem o nei repository."*)
-- Checklist infra (Hetzner setup): `pm/sources/2026-04-doc-checklist-hetzner.md`
+- Pattern gitignore credenziali: `.gitignore` (linee `**/Credentials*`,
+  `**/credentials*`, `*.secret`)
+- Template variabili env: `.env.example`
