@@ -19,7 +19,7 @@
 | P1 | _(triggered)_ Integrare 4° ibrido (Extended Range) | ⏸️ | Bloccato finché Paolo non conferma nome esatto + modelli (Nissan/BYD). |
 | P2 | ADR retroattivi: architettura 4-layer + scope Release 0.0 | ⏳ | Documentare scelte già prese in `pm/decisions/`. Utile perché stiamo costruendo il prototipo su queste fondamenta. |
 | P2 | Riattivazione **Perplexity (Sonar)** | ⏸️ | UI nascosta, codice in main. In attesa di `PERPLEXITY_API_KEY` cliente. Dipendenza esterna senza ETA. |
-| P2 | Aggiungere `pm/sources/` a `.gitignore` | ⏳ | → `pm/pm-agent/handoff-2026-05-10-a-gitignore-pm-sources.md` |
+| P2 | Aggiungere `pm/sources/` a `.gitignore` | ✅ | Chiuso 2026-05-10. Vedi handoff archiviato → `pm/pm-agent/handoff-archive/handoff-2026-05-10-a-gitignore-pm-sources.md` |
 
 **Legenda priorità**
 - **P0** — Bloccante / urgente, va fatto subito
