@@ -10,6 +10,7 @@
 
 | Priorità | Task | Stato | Note |
 |---|---|---|---|
+| **P0** ⚠️ | **Rotazione credentials + cleanup repo** | ⏳ | **URGENTE.** `Docs/Credentials.txt` ha 6 secret in chiaro committati. Rotazione tutte le chiavi + pulizia git history + setup `.env`. → `pm/pm-agent/handoff-2026-05-10-b-rotate-credentials.md` |
 | P0 | Verifica + completamento **L3 commenti** | ⏳ | Stima ~8h+. Era da chiudere entro 5 maggio (call Paolo), in realtà non è chiuso. [handoff Code] Ground truth: cosa è già live di L3 (sentiment, ingest commenti YouTube/Reddit/forum), cosa manca per chiudere. Riportare in FEEDBACK con stima residua. |
 | P0 | Test **"solo YouTube"** vs L2 completo | ⏳ | Verificare se YouTube editoriale da solo è sufficiente per il prototipo, o se servono anche le testate news. Output: decisione di scope L2. [handoff Code] da disegnare quando l'approccio è chiaro. |
 | P0 | **L4 campagne adv** — approfondire bozza | ⏳ | Esiste solo una bozza, va approfondita prima di passare a Code. Task di disegno (Ale): scope, fonti (Facebook Ads Library + Google Ads), output atteso, integrazione con L2/L3. Da L4 disegnato → handoff esecuzione. |
@@ -47,10 +48,10 @@
 - Probabile finestra mer 13 / gio 14 maggio
 - Aggiornamenti al PM via questa chat
 
-**Pending Paolo (dalla call 4 maggio):**
+**Pending Paolo (dalla call 4 maggio + mail 23 aprile):**
 - Numero auto prototipo (ipotesi 500-1000 → ridurre a pochi segmenti)
 - Conferma 4° tipo ibrido (Extended Range Hybrid)
-- Decisione fatturazione mensile (deve sentire il fratello)
+- Decisione fatturazione mensile + soggetto fatturazione (**UNICAB Italia SRL** da contratto, ma Paolo ha proposto società terza, probabile Excellgo — deve sentire il fratello)
 
 **Sensibilità da tenere a mente:** Paolo ha citato un evento familiare difficile (padre coinvolto nel progetto). Sui solleciti, dare margine. Modello operativo: auto **a gruppetti**, non file unico.
 
