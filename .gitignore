@@ -51,7 +51,13 @@ htmlcov/
 
 # Alembic
 backend/alembic/versions/__pycache__/
-Credentials.txt
+
+# Secret files — never commit
+**/Credentials*
+**/credentials*
+!**/credentials/.gitkeep
+*.secret
+
 .claude/
 
 # PM private sources (call notes, mails, internal docs — never commit)
