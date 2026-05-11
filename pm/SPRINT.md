@@ -15,9 +15,9 @@
 | P0 | **L4 campagne adv** — approfondire bozza | ⏳ | Esiste solo una bozza, va approfondita prima di passare a Code. Task di disegno (Ale): scope, fonti (Facebook Ads Library + Google Ads), output atteso, integrazione con L2/L3. Da L4 disegnato → handoff esecuzione. |
 | P1 | Scheda **"prestazioni"** in L1 | ⏳ | Preso con Paolo. Test su Honda Jazz e modelli segmento C/D. [handoff Code] dopo che disegno scheda è stato discusso. |
 | P1 | _(triggered)_ Strutturare dataset prototipo | ⏸️ | Bloccato finché Paolo non manda numero auto (ipotesi 500-1000 modello+versione, da ridurre a pochi segmenti). |
-| P1 | _(triggered)_ Integrare 4° ibrido (Extended Range) | ⏸️ | Bloccato finché Paolo non conferma nome esatto + modelli (Nissan/BYD). |
+| P2 | _(triggered)_ Integrare 4° ibrido (Extended Range) | ⏸️ | **Declassato a P2 (2026-05-11):** è questione di sola nomenclatura, non un tema operativo. Bloccato finché Paolo non conferma nome esatto + modelli (Nissan/BYD), ma senza urgenza. |
 | P2 | ADR retroattivi: architettura 4-layer + scope Release 0.0 | ⏳ | Documentare scelte già prese in `pm/decisions/`. Utile perché stiamo costruendo il prototipo su queste fondamenta. |
-| P2 | Riattivazione **Perplexity (Sonar)** | ⏸️ | UI nascosta, codice in main. In attesa di `PERPLEXITY_API_KEY` cliente. Dipendenza esterna senza ETA. |
+| P2 | ~~Riattivazione **Perplexity (Sonar)**~~ | ❌ | **Cancellato 2026-05-11.** Premessa errata: Perplexity Sonar Pro è già attiva in L1 Strato B (`scrapers/src/perplexity_client.py` + `_scrape_official_perplexity` in `test_scrape.py:1667`). La nota "in attesa API key cliente" in `00-stato-progetto.md` era stale, corretta da Code (commit `chore(pm): risposta a discrepanze FEEDBACK + correzioni 00-stato-progetto`). Esiste un dispatch legacy `source_type="perplexity"` mappato a L2 con UI nascosta, materiale legacy. |
 | P2 | Aggiungere `pm/sources/` a `.gitignore` | ✅ | Chiuso 2026-05-10. Vedi handoff archiviato → `pm/pm-agent/handoff-archive/handoff-2026-05-10-a-gitignore-pm-sources.md` |
 
 **Legenda priorità**
@@ -49,8 +49,8 @@
 
 **Pending Paolo (dalla call 4 maggio + mail 23 aprile):**
 - Numero auto prototipo (ipotesi 500-1000 → ridurre a pochi segmenti)
-- Conferma 4° tipo ibrido (Extended Range Hybrid)
 - Decisione fatturazione mensile + soggetto fatturazione (**UNICAB Italia SRL** da contratto, ma Paolo ha proposto società terza, probabile Excellgo — deve sentire il fratello)
+- _(minore)_ Conferma nome 4° tipo ibrido (Extended Range) — solo nomenclatura, non urgente
 
 **Sensibilità da tenere a mente:** Paolo ha citato un evento familiare difficile (padre coinvolto nel progetto). Sui solleciti, dare margine. Modello operativo: auto **a gruppetti**, non file unico.
 

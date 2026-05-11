@@ -93,7 +93,7 @@ Tema importante che ha modificato il senso di L1 nel tempo:
 - Abbonamenti premium testate ("vediamo prima cosa raccogliamo gratis")
 - Social testate (TikTok / IG / FB) — bloccato post-Cambridge Analytica
 - Rubriche broadcaster motori (Mediaset / Sky / Rai) — tecnicamente complicato, basso ROI
-- Riattivazione Perplexity Sonar (dipendenza API key cliente) — **NB: in realtà Perplexity Sonar Pro è già usato in L1 Strato B; nota in `00-stato-progetto.md` stale, da correggere via FEEDBACK**
+- _(rimosso 2026-05-11)_ ~~Riattivazione Perplexity Sonar~~ → era basato su premessa errata, Perplexity è già attiva in L1 Strato B. Cancellato dallo SPRINT. La nota in `00-stato-progetto.md` è stata corretta da Code (FEEDBACK risolto 2026-05-11).
 
 ---
 
@@ -161,8 +161,8 @@ Vedi `pm/projects/stakeholder.md` per dettaglio completo. Riassunto:
 ## Pending Paolo
 
 - [ ] Numero auto prototipo (entro prossima call)
-- [ ] Conferma 4° tipo ibrido (Extended Range Hybrid — Nissan/BYD)
 - [ ] Risposta su fatturazione mensile + soggetto fatturazione (UNICAB Italia o Excellgo)
+- [ ] _(minore)_ Conferma nome 4° tipo ibrido (Extended Range) — solo nomenclatura, non urgente
 
 ## Pending Ale
 
