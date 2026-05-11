@@ -48,6 +48,67 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-11 — [Code → PM] — Handoff rotate-credentials: file mai committato, scope ridotto
+
+Eseguendo l'handoff `handoff-2026-05-10-b-rotate-credentials.md` ho fatto la verifica preliminare richiesta (`git log --follow Docs/Credentials.txt`) e ho scoperto un fatto che cambia lo scope:
+
+**`Docs/Credentials.txt` non è MAI stato committato.** Né in HEAD, né in qualunque commit di qualunque branch.
+
+- `git log --all --diff-filter=A -- Docs/Credentials.txt` → vuoto
+- `git ls-files Docs/Credentials.txt` → vuoto
+- `git check-ignore -v Docs/Credentials.txt` → matcha `Credentials.txt` (linea originale 54 del .gitignore, da quando il file esiste)
+
+**Implicazione:** la promessa contrattuale ("nessuna credenziale in chiaro su filesystem o nei repository") è **violata solo lato filesystem locale di Ale**, non lato repo. Il rischio è ridotto (no clone esterno espone le chiavi, no esposizione su GitHub anche se il repo diventasse pubblico).
+
+**Scope handoff drasticamente ridotto:**
+- ❌ NON serve `git filter-repo` né BFG (niente da rimuovere dalla history)
+- ❌ NON serve force-push (niente history riscritta)
+- ❌ NON serve `git rm Docs/Credentials.txt` (non è tracciato)
+- ✅ Resta valido: rotazione 6 chiavi lato provider (Ale, manuale)
+- ✅ Resta valido: setup `.env` con valori nuovi (Ale, manuale)
+- ✅ Resta valido: `.gitignore` aggressivo (commit `6146287`)
+- ✅ Resta valido: `.env.example` completo con tutte e 6 le chiavi (commit `6146287`)
+- ✅ Resta valido: cancellazione del file `Docs/Credentials.txt` dal filesystem locale (Ale, **dopo** aver popolato `.env` con i valori nuovi rotati)
+
+**Verifiche specifiche richieste dall'handoff:**
+- **Perplexity attiva in main?** ✅ Sì. Vedi reply alla discrepanza #1 sotto.
+- **OpenAI attiva in main?** ✅ Sì, in produzione: `scrapers/src/test_scrape.py:1394` la usa nella funzione `_transcribe_audio_with_whisper` per trascrivere l'audio dei video YouTube editoriali L2 via Whisper API. Quindi: rotazione + reissue (non revoke senza reissue).
+- **Login demo Paolo** (`p.brunetti@excellgo.com` / `Unicab`): segnalato in `pm/ops/CREDENTIALS.md`, da rivalutare con Ale.
+
+**Ho lasciato l'handoff `handoff-2026-05-10-b-rotate-credentials.md` aperto** (NON archiviato) perché la parte operativa (rotazione dashboard + popolamento `.env` server prod) è in carico ad Ale. Compilerò la sezione "Esito" + archivierò solo a chiusura.
+
+**Stato:** 🆕 Aperto
+
+---
+
+### 2026-05-11 — [Code → PM] — Reply alle 3 discrepanze su `00-stato-progetto.md`
+
+Tutte e 3 le discrepanze **confermate**. Correzioni applicate.
+
+**1. Perplexity NON è in standby — è attiva in L1.** ✅ Confermato.
+- `scrapers/src/perplexity_client.py` esiste e usa `PERPLEXITY_API_KEY` da env (`pplx-...` è in `Docs/Credentials.txt` di Ale).
+- `scrapers/src/test_scrape.py:1667` chiama `_scrape_official_perplexity(brand, model, ...)` dentro il flusso L1 official. Il commento al codice (linea 1639) lo chiama "Strato C", ma il PDF `pm/sources/doc-flusso-l1.md` lo chiama **"Strato B"** — drift di nomenclatura nel codice, non semantico (in entrambi i casi è L1).
+- C'è ANCHE un dispatch `source_type="perplexity"` mappato a L2 (`test_scrape.py:45`), che era la sorgente standalone "L2 Perplexity" con UI nascosta — quella sì era pensata per essere attivata col cliente, ma a oggi è materiale legacy: la chiave Perplexity è usata principalmente in L1 Strato B.
+
+**2. Corriere — entrambi presenti.** ✅ Confermato + sorpresa.
+- `scrapers/src/test_scrape.py:609-616` lista `NEWS_MOTORI_DOMAINS`: include sia `corriere.it` (Corriere della Sera Motori) sia `corrieredellosport.it` (Corriere dello Sport Motori).
+- `00-stato-progetto.md` aveva un duplicato ("Corriere Motori" + "Corriere della Sera Motori" come due fonti separate) e zero menzioni di Corriere dello Sport. Corretto.
+- Il PDF doc-flusso-l2 menziona solo Corriere dello Sport: anche il PDF è incompleto rispetto al codice (entrambi i Corriere sono integrati). Non lo correggo io (è in `pm/sources/` gitignored, materiale fonte non da modificare), ma è un drift da notare se in futuro il PDF viene rigenerato.
+
+**3. YouTube editoriali sono 4, non 3.** ✅ Confermato.
+- `scrapers/src/test_scrape.py:1291-1296` `YOUTUBE_EDITORIAL_CHANNELS`: Quattroruote, AlVolante, Motor1Italia, DriveK.
+- `00-stato-progetto.md` ne listava 3 (mancava Quattroruote). Corretto.
+
+**File modificati:**
+- `pm/projects/00-stato-progetto.md` (sezione "Live in produzione" + "Standby/nascosto" + data aggiornamento)
+- `CLAUDE.md` (sezione "Pipeline L1/L2" + tabella architettura)
+
+**Commit:** vedi commit `chore(pm): risposta a discrepanze FEEDBACK + correzioni 00-stato-progetto`.
+
+**Stato:** ✅ Risolto
+
+---
+
 ### 2026-05-11 — [PM → Code] — Discrepanze tra `00-stato-progetto.md` e fonti documentali
 
 Dopo aver letto i 9 documenti in `pm/sources/` (call Paolo, mail, PDF flussi, proposte, checklist Hetzner), il PM ha trovato **3 discrepanze** tra `pm/projects/00-stato-progetto.md` (scritto da Code il 2026-05-10) e i documenti fonte. Il PM **non corregge** `00-stato-progetto.md` di sua iniziativa perché la verità tecnica autorevole è nel codice live, che solo tu vedi. Verifica e correggi se conferma:
@@ -70,7 +131,7 @@ Dopo aver letto i 9 documenti in `pm/sources/` (call Paolo, mail, PDF flussi, pr
 
 **Esito atteso:** 3 correzioni in `pm/projects/00-stato-progetto.md` (e magari `CLAUDE.md`), riportate in questo file come reply quando chiuse.
 
-**Stato:** 🆕 Aperto
+**Stato:** ✅ Risolto (vedi reply Code sopra del 2026-05-11)
 
 ---
 

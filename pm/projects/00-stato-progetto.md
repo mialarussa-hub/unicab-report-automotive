@@ -6,7 +6,7 @@
 > milestone, nuova fonte, nuovo ambiente, ecc.). **Non è SPRINT** —
 > qui c'è il contesto, le priorità le scrivi in `pm/SPRINT.md`.
 
-**Ultimo aggiornamento:** 2026-05-10
+**Ultimo aggiornamento:** 2026-05-11
 **Aggiornato da:** Claude Code
 
 > **Nota 2026-05-10 (PM):** in call con Paolo del 2026-05-04, **L1 (siti case
@@ -31,18 +31,20 @@ report AI consultabili via dashboard.
 
 ### ✅ Live in produzione
 - **L1** (pipeline base ingest + report) — produttiva
-- **L2 minireport AI per modello** — operativa con **8 fonti
-  editoriali**:
-  - News: AlVolante, Quattroruote, Corriere Motori, Repubblica, La
-    Stampa, Gazzetta, Corriere della Sera Motori, Motor1.it
-  - YouTube editoriali: AlVolante, Motor1 Italia, DriveK (trascrizione
-    Whisper + scraping commenti)
+- **L2 minireport AI per modello** — operativa con **8 testate scritte**
+  + **4 canali YouTube editoriali**:
+  - News: AlVolante, Quattroruote, Corriere della Sera Motori,
+    Repubblica, La Stampa, Gazzetta, **Corriere dello Sport** Motori,
+    Motor1.it
+  - YouTube editoriali: **Quattroruote**, AlVolante, Motor1 Italia,
+    DriveK (trascrizione Whisper + scraping commenti)
+- **Perplexity Sonar Pro** — **attiva** in L1 Strato B (web ufficiale
+  esteso), 1 query con prompt restrittivo. Chiave già in uso lato Ale.
 - **Dashboard** consultabile su https://unicab.automica.it
 - **Sentiment** (batch) attivo
 
 ### 🔄 In standby / nascosto
-- **Perplexity (Sonar)** — codice in main, UI nascosta in attesa di
-  `PERPLEXITY_API_KEY` cliente
+_(nessun componente in standby al 2026-05-11)_
 
 ### 🚧 Recentemente shippato (ultimi commit)
 - Fix `_clean_items_with_ai` non sovrascrive più `ai_comments`

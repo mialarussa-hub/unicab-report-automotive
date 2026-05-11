@@ -178,7 +178,7 @@ unicab.automica.it.
 | Componente | Path | Stack | Ruolo |
 |---|---|---|---|
 | API + report engine | `backend/` | Python (FastAPI), pydantic-settings, SQLAlchemy + Alembic | Endpoint REST, orchestrazione report, sentiment, adv, sources, timesheet |
-| Scrapers | `scrapers/` | Python | Reddit, YouTube (yt-dlp + Whisper + commenti), news (Firecrawl 2-step search→scrape), Facebook/Google Ads, Perplexity client (standby), motore (specs auto) |
+| Scrapers | `scrapers/` | Python | Reddit, YouTube (yt-dlp + Whisper + commenti), news (Firecrawl 2-step search→scrape), Facebook/Google Ads, Perplexity Sonar Pro (L1 Strato B), motore (specs auto) |
 | Frontend | `frontend/` | Templates + static (server-side render via API) | Dashboard report viewer + admin (Test Scraping, timesheet) |
 | Workflow automation | `n8n/` | n8n | Orchestrazione job ricorrenti, schedulazione scraping/report |
 | Reverse proxy | `nginx/` | nginx | TLS, routing API/n8n |
@@ -200,16 +200,21 @@ In `backend/app/models/`: `user`, `source`, `scraping`, `report`,
 ### Pipeline L1 / L2
 
 - **L1** (produttivo) — pipeline base di ingest + report standard.
+  Tre strati per ogni brand: A) sito ufficiale, B) Perplexity Sonar
+  Pro (web ufficiale esteso, 1 query con prompt restrittivo), +
+  YouTube ufficiale del brand. Aggregazione AI cross-source con
+  Claude Sonnet.
 - **L2** (in espansione) — minireport AI per modello con sintesi
-  media/giornalisti per sessione. Fonti L2 attive (al 2026-05-10):
-  - **News editoriali (8):** AlVolante, Quattroruote, Corriere
-    Motori, Repubblica, La Stampa, Gazzetta, Corriere della Sera
-    Motori, Motor1.it
-  - **YouTube editoriali (3):** AlVolante, Motor1 Italia, DriveK
-    (trascrizione Whisper + scraping commenti video)
-- **Perplexity (Sonar)** — implementato in main, **UI nascosta** in
-  attesa di API key. Per riattivarlo: aggiungere `PERPLEXITY_API_KEY`
-  + reinserire l'option nel dropdown.
+  media/giornalisti per sessione. Fonti L2 attive (al 2026-05-11):
+  - **News editoriali (8):** AlVolante, Quattroruote, Corriere della
+    Sera Motori, Repubblica, La Stampa, Gazzetta, Corriere dello
+    Sport Motori, Motor1.it
+  - **YouTube editoriali (4):** Quattroruote, AlVolante, Motor1
+    Italia, DriveK (trascrizione Whisper + scraping commenti video)
+- **Perplexity Sonar Pro** — **attiva** in L1 Strato B. La nota
+  storica "in attesa di API key cliente" è stale: la chiave c'è ed è
+  in uso (verificare in `scrapers/src/perplexity_client.py` e
+  `_scrape_official_perplexity` in `test_scrape.py`).
 
 ### Infrastruttura
 
