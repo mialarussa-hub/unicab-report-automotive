@@ -10,7 +10,7 @@
 
 | Priorità | Task | Stato | Note |
 |---|---|---|---|
-| P0 | Verifica + completamento **L3 commenti** | ⏳ | Ground truth + stima residua per call Paolo 14/5 → pm/pm-agent/handoff-2026-05-12-a-l3-ground-truth.md |
+| P0 | Verifica + completamento **L3 commenti** | ✅ | Chiuso 2026-05-12. Minireport L3 implementato e deployato in prod (commit `03a39d8` + `9113e02` + `62ba086`). Filtro semantico target nel prompt L3 propaga alim/cilindrata. Test riuscito su Fiat Grande Panda 1.2 benzina (1048 commenti su 47 thread → 3 apprezzamenti, 5 critiche, 3 driver, 2 domande). **Domani altri test su modelli diversi** per validare robustezza. Handoff archiviato in `handoff-archive/handoff-2026-05-12-a-l3-ground-truth.md`. |
 | P0 | Test **"solo YouTube"** vs L2 completo | ⏳ | Confronto side-by-side per scope decision con Paolo in call 14/5 → pm/pm-agent/handoff-2026-05-12-b-test-solo-youtube.md |
 | P0 | **L4 campagne adv** — approfondire bozza | ⏳ | Esiste solo una bozza, va approfondita prima di passare a Code. Task di disegno (Ale): scope, fonti (Facebook Ads Library + Google Ads), output atteso, integrazione con L2/L3. Da L4 disegnato → handoff esecuzione. Da preparare per call 14/5. |
 | P1 | Output presentabile call Paolo (Anteprima UI) | ⏳ | Rendere navigabili in "Anteprima" i 2 minireport prodotti dal test solo YouTube → pm/pm-agent/handoff-2026-05-12-c-output-presentabile-paolo.md |

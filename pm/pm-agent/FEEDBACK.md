@@ -48,6 +48,32 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-12 — [Code → PM] — L3 commenti chiuso ✅ (handoff-a archiviato)
+
+Handoff `handoff-2026-05-12-a-l3-ground-truth.md` completato e spostato in `handoff-archive/`. Esito ✅ pieno: ground-truth + implementazione + deploy + test riuscito.
+
+**Cosa è successo (sintesi per call Paolo):**
+- Layer 3 prima raccoglieva commenti e li classificava per-comment, ma **mancava la sintesi aggregata** — quello che Ale aveva visto il 4/5 era proprio questo bug (commenti pescati, report assente). Confermato dal codice: `analyze_l3` non esisteva.
+- Oggi implementato il minireport L3 user-voice: 1 chiamata Claude Sonnet 4 → `sentiment_globale` con distribuzione, `apprezzamenti_utenti`, `critiche_problematiche`, `driver_acquisto` (pro/contro), `domande_ricorrenti`, `fonti_per_tipo`. Card UI dedicata in cima alla sezione L3.
+- Cross-link L2→L3 implementato: i commenti dei video editoriali L2 (Quattroruote, AlVolante, Motor1, DriveK) confluiscono nel report L3 senza essere riscrappati, con dedup per video_id.
+- **Filtro semantico target** nel prompt L3: risolve la contaminazione da altre versioni omonime (es. Panda 4x4/Hybrid quando il target è Grande Panda). Niente esempi hardcoded, il prompt è dinamico e generalizza.
+
+**Test riuscito su Fiat Grande Panda 1.2 benzina:** 1048 commenti su 47 thread → 3 apprezzamenti, 5 critiche, 3 driver, 2 domande. Output visibile su unicab.automica.it.
+
+**Da segnalare in call:**
+- L3 è ora a livello prototipo, navigabile dal cliente in Anteprima
+- Cosa resta come "follow-up nice-to-have" (non bloccante): un bottone "rigenera report L3" per ri-eseguire la sintesi su una sessione già scrapata (utile per iterare sul prompt senza pagare un nuovo scrape)
+
+**Domani altri test su modelli diversi** (probabilmente BMW Serie 3, Honda Jazz o un premium) per validare la robustezza del filtro target su nomi diversi. Se emergono regressioni, segnalerò.
+
+**SPRINT.md aggiornato**: task L3 ✅, restano per oggi/domani: P0 b (test "solo YouTube"), P0 c (L4 disegno — Ale), P1 c (Anteprima UI dopo test b), P1 d (scheda Prestazioni — Ale).
+
+**Commit di riferimento:** `03a39d8`, `9113e02`, `62ba086` (codice) + commit successivo `chore(pm): chiusura task L3` (con questo file e SPRINT/DONE/DEPLOY aggiornati).
+
+**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+
+---
+
 ### 2026-05-12 — [Code → PM] — Nuova REGOLA MASTER #1 in CLAUDE.md (worktree vs repo principale)
 
 Stamattina hai scritto 4 nuovi handoff (`handoff-2026-05-12-a/b/c/d-*.md`) e modificato `SPRINT.md`, ma io non li vedevo. Causa: stavo operando da un **git worktree** (`.claude/worktrees/cranky-merkle-fa25d1/`) mentre tu scrivi sempre nella **repo principale** (`D:\PROGETTI\UNICAB\Piattaforma`). Sono due cartelle/branch diversi finché un commit non viene mergiato — `git pull --ff-only` nel worktree restituiva "Already up to date" perché era sincronizzato col SUO remote, non con i file untracked del PM nella repo principale.
