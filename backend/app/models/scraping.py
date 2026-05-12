@@ -32,6 +32,11 @@ class ScrapingSession(Base):
     # commenti utenti + punti di forza/debolezza ricorrenti. Generato via Claude
     # alla fine della sessione, una sola chiamata aggregata su tutti gli articoli L2.
     l2_synthesis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Minireport L3: sintesi voce degli utenti — sentiment globale, apprezzamenti,
+    # critiche, driver di acquisto, domande ricorrenti. Aggrega commenti da L3 nativo
+    # (forum + youtube user + reddit) + cross-import dei commenti raccolti sotto i
+    # video editoriali L2 (dedup per video_id). 1 chiamata Claude a fine sessione.
+    l3_synthesis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     phase_filter: Mapped[str] = mapped_column(String(10), default="all", nullable=False)  # all, L1, L2, L3
     filter_alimentazione: Mapped[str | None] = mapped_column(String(30), nullable=True)
     filter_cilindrata: Mapped[float | None] = mapped_column(Numeric(3, 1), nullable=True)

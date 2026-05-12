@@ -422,6 +422,13 @@ async def _run_scraping_background(
             if isinstance(l2_synth, dict):
                 session.l2_synthesis = l2_synth
 
+            # L3 minireport (sintesi voce utenti) — opzionale, presente solo se
+            # ci sono almeno 10 commenti aggregati su fonti L3 (forum/yt user/
+            # reddit/social) + cross-import dei commenti dei video editoriali L2.
+            l3_synth = data.get("l3_synthesis")
+            if isinstance(l3_synth, dict):
+                session.l3_synthesis = l3_synth
+
             # Per-source diagnostic summary (rebuilt at finalize regardless of
             # callback success — the callback is best-effort for real-time UI).
             session.source_runs = [
@@ -777,6 +784,7 @@ async def get_session(
         "is_featured": bool(session.is_featured),
         "sources": list(sources_map.values()),
         "l2_synthesis": session.l2_synthesis,
+        "l3_synthesis": session.l3_synthesis,
         "total_credits": session.total_credits,
         "total_duration_ms": session.duration_ms,
     }

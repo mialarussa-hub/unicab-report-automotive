@@ -33,6 +33,21 @@ def _normalize_forum_url(url: str) -> str:
     url = re.sub(r'\?$', '', url)
     return url
 
+
+_YT_VIDEO_ID_RE = re.compile(r"(?:v=|youtu\.be/|embed/|shorts/)([A-Za-z0-9_-]{11})")
+
+
+def _extract_youtube_video_id(url: str) -> str | None:
+    """Extract the 11-char YouTube video_id from common URL formats. None if not found.
+
+    Used by the L3 aggregator to dedup videos that have already been scraped as
+    L2 youtube_editorial (so the same video's comments are not counted twice).
+    """
+    if not url:
+        return None
+    m = _YT_VIDEO_ID_RE.search(url)
+    return m.group(1) if m else None
+
 logger = logging.getLogger(__name__)
 
 def _find_pagination_urls(markdown: str, base_url: str) -> list[str]:
@@ -204,6 +219,68 @@ async def run_test_scrape(
         except Exception as e:
             logger.error(f"L2 synthesis call raised: {e}")
 
+    # L3 synthesis: voce degli utenti. Aggrega commenti da L3 nativo
+    # (forum/reddit/youtube user) + cross-import dai video editoriali L2.
+    # Dedup per video_id YouTube: se un video e' gia' stato scrappato come
+    # youtube_editorial, lo skippiamo se ricapita in youtube (L3) per evitare
+    # doppio conteggio dei suoi commenti nella sintesi.
+    # Skippiamo anche la chiamata Claude se i commenti totali sono sotto soglia
+    # (10, come PHASE_MIN_MATCHES["L3"] in scraping_test.py): un report fatto
+    # su pochissimi commenti rischia di essere inventato.
+    L3_MIN_COMMENTS = 10
+    l3_synthesis = None
+
+    l2_yt_video_ids: set[str] = set()
+    for sr in source_results:
+        if sr.source_type == "youtube_editorial" and sr.items:
+            for it in sr.items:
+                vid = _extract_youtube_video_id(it.get("url", ""))
+                if vid:
+                    l2_yt_video_ids.add(vid)
+
+    l3_items: list[dict] = []
+    for sr in source_results:
+        if not sr.items:
+            continue
+        if sr.source_type == "youtube_editorial":
+            # Cross-import: i commenti dei video editoriali L2 entrano in L3 senza
+            # essere riscrappati. Tag esplicito per il prompt L3.
+            for it in sr.items:
+                l3_items.append({**it, "_source_type": "youtube_editorial"})
+            continue
+        if sr.source_type in ("forum", "youtube", "social"):
+            for it in sr.items:
+                url = it.get("url", "") or ""
+                # Dedup: skippa video YouTube L3 gia' coperti da L2 editoriale
+                if sr.source_type == "youtube":
+                    vid = _extract_youtube_video_id(url)
+                    if vid and vid in l2_yt_video_ids:
+                        logger.warning(
+                            f"L3 dedup: skip YouTube video {vid} (already in L2 editorial)"
+                        )
+                        continue
+                # Reddit gira sotto source_type=forum ma per la statistica L3
+                # preferiamo distinguerlo (utile in fonti_per_tipo del report).
+                if sr.source_type == "forum" and "reddit.com" in url:
+                    tag = "reddit"
+                else:
+                    tag = sr.source_type
+                l3_items.append({**it, "_source_type": tag})
+
+    if l3_items:
+        total_l3_comments = sum(len(it.get("ai_comments") or []) for it in l3_items)
+        if total_l3_comments >= L3_MIN_COMMENTS:
+            from src.content_cleaner import analyze_l3_user_synthesis
+            try:
+                l3_synthesis = await analyze_l3_user_synthesis(l3_items, brand, model)
+            except Exception as e:
+                logger.error(f"L3 synthesis call raised: {e}")
+        else:
+            logger.warning(
+                f"L3 synthesis skipped for {brand} {model}: "
+                f"{total_l3_comments} commenti totali < soglia {L3_MIN_COMMENTS}"
+            )
+
     total_ms = int((time.time() - start) * 1000)
 
     response = asdict(TestScrapeResponse(
@@ -212,6 +289,8 @@ async def run_test_scrape(
     ))
     if l2_synthesis is not None:
         response["l2_synthesis"] = l2_synthesis
+    if l3_synthesis is not None:
+        response["l3_synthesis"] = l3_synthesis
     return response
 
 

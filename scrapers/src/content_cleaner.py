@@ -982,6 +982,237 @@ async def analyze_l2_media_synthesis(
         return None
 
 
+# ---------------------------------------------------------------------------
+# L3 minireport — sintesi della voce degli utenti, aggrega commenti utente da
+# forum + youtube (user) + reddit/social + cross-import dai video editoriali L2.
+# Dedup video_id è responsabilità del caller (in test_scrape.py).
+# ---------------------------------------------------------------------------
+
+L3_USER_SYNTHESIS_PROMPT = """Sei un analista che sintetizza la VOCE DEGLI UTENTI su un modello automobilistico.
+
+Ricevi un pacchetto di commenti scritti dal pubblico (NON dai giornalisti) su {brand} {model}, raccolti da forum specialistici auto, thread Reddit, video YouTube di utenti e commenti pubblicati sotto video editoriali (recensioni di canali professionali). Ogni elemento è un singolo thread/video con il suo elenco di commenti utenti.
+
+COMPITO: produrre un minireport sintetico che dia voce agli UTENTI, NON ai giornalisti. Il contenuto editoriale (articolo o trascrizione del giornalista) NON è incluso nel pacchetto — leggi e analizza solo i commenti.
+
+OUTPUT (restituisci ESATTAMENTE questa struttura, UN solo oggetto JSON):
+
+{{
+  "is_l3_synthesis": true,
+  "brand": "{brand}",
+  "model": "{model}",
+  "sentiment_globale": {{
+    "dominante": "positivo | neutro | misto | critico",
+    "n_commenti_analizzati": 0,
+    "distribuzione": {{ "positivi": 0, "neutri": 0, "critici": 0 }},
+    "descrizione": "1-2 frasi che sintetizzano l'umore complessivo del pubblico"
+  }},
+  "apprezzamenti_utenti": [
+    {{
+      "tema": "etichetta breve (es. Consumi reali, Comfort lunghe percorrenze, Design)",
+      "descrizione": "1-2 frasi che riassumono cosa gli utenti apprezzano",
+      "fonti": ["url_thread_1", "url_thread_2"]
+    }}
+  ],
+  "critiche_problematiche": [
+    {{
+      "tema": "etichetta breve",
+      "descrizione": "1-2 frasi sulla criticita segnalata dagli utenti",
+      "fonti": ["url_thread"]
+    }}
+  ],
+  "driver_acquisto": [
+    {{
+      "driver": "etichetta breve",
+      "direzione": "pro | contro",
+      "descrizione": "1-2 frasi: motivo emerso per cui gli utenti comprerebbero o NON comprerebbero"
+    }}
+  ],
+  "domande_ricorrenti": [
+    {{
+      "tema": "etichetta breve della domanda (es. Compatibilita seggiolini, Autonomia reale invernale)",
+      "esempi": ["parafrasi domanda 1", "parafrasi domanda 2"]
+    }}
+  ],
+  "note_metodologiche": "limitazioni dell'analisi (es. 'pochi commenti reddit, prevalenza forum'). NON menzionare fonti non presenti nel pacchetto come mancanze."
+}}
+
+REGOLE FONDAMENTALI:
+1. **Voce degli utenti**: l'analisi deve riflettere SOLO cio che gli utenti dicono nei commenti. Anche quando il thread origina da un articolo o video di un giornalista, qui ricevi unicamente i commenti — non confonderti con la voce editoriale.
+2. **Temi ricorrenti**: includi un tema in `apprezzamenti_utenti` / `critiche_problematiche` / `driver_acquisto` SOLO se emerge da almeno 2 commenti distinti (preferibilmente in thread diversi). Scarta i temi citati una sola volta.
+3. **MASSIMO 5** elementi per sezione (apprezzamenti, critiche, driver, domande), MINIMO 0 (lista vuota se non emergono pattern solidi).
+4. **fonti**: SOLO URL effettivamente presenti nel pacchetto, MAI inventati.
+5. **descrizione**: parafrasi sintetica, NON quote testuali letterali.
+6. **sentiment_globale.distribuzione**: stima approssimativa (positivi + neutri + critici devono sommare circa a `n_commenti_analizzati`).
+7. **sentiment_globale.dominante**: scegli il valore che meglio rappresenta la maggioranza dei commenti analizzati.
+8. **domande_ricorrenti**: identifica solo domande GENUINE poste dagli utenti (con punto di domanda o forma "qualcuno sa se...", "chi ha esperienza con..."). MASSIMO 5.
+9. Se il pacchetto e povero (<10 commenti totali), restituisci comunque la struttura ma quasi vuota, segnalando la scarsita in `note_metodologiche`.
+10. Restituisci SOLO il JSON, nessuna spiegazione, nessun markdown.
+
+REGOLE JSON (importanti — evitano output non parseabile):
+- Nelle stringhe non usare mai virgolette doppie (") nidificate. Usa le virgolette italiane «...» o l'apostrofo tipografico '.
+- Non inserire newline o tab grezzi dentro le stringhe.
+- Verifica che il JSON sia un documento singolo valido prima di restituirlo.
+
+PACCHETTO COMMENTI UTENTI:
+
+{items_text}"""
+
+
+async def analyze_l3_user_synthesis(
+    items: list[dict], brand: str, model: str,
+) -> dict | None:
+    """Generate a synthetic L3 minireport from user comments aggregated across
+    forum + youtube (user) + reddit/social + cross-imported comments from L2
+    youtube_editorial items.
+
+    Each `items[i]` is expected to expose `ai_comments` (list of {text,...}),
+    `url`, `title` and `_source_type` (annotation set by the caller). Items
+    without comments are silently skipped — L3 analysis is comments-only.
+
+    Single Claude call. Returns a dict with the keys defined in
+    L3_USER_SYNTHESIS_PROMPT, plus a `fonti_per_tipo` map computed
+    server-side from observed `_source_type` (more reliable than letting
+    the model count). None on failure (caller falls back gracefully).
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key or not items:
+        return None
+
+    parts = []
+    total_user_comments = 0
+    per_type_threads: dict[str, int] = {}
+    for i, item in enumerate(items):
+        ai_comments = item.get("ai_comments") or []
+        if not ai_comments:
+            continue
+        title = item.get("title", "Senza titolo")
+        url = item.get("url", "")
+        src_type = item.get("_source_type") or "unknown"
+
+        sample = ai_comments[:60]
+        comment_lines = []
+        for c in sample:
+            if isinstance(c, dict):
+                txt = (c.get("text") or "").strip().replace("\n", " ")[:300]
+                if txt:
+                    comment_lines.append(f"- {txt}")
+        if not comment_lines:
+            continue
+
+        per_type_threads[src_type] = per_type_threads.get(src_type, 0) + 1
+        total_user_comments += len(ai_comments)
+        more = (
+            f" (+{len(ai_comments) - len(sample)} ulteriori)"
+            if len(ai_comments) > len(sample) else ""
+        )
+        parts.append(
+            f"[{i+1}] Tipo fonte: {src_type}\nTitolo thread: {title}\nURL: {url}\n"
+            f"Commenti utenti ({len(ai_comments)} totali{more}):\n"
+            + "\n".join(comment_lines)
+        )
+
+    if not parts:
+        return None
+
+    items_text = "\n\n===\n\n".join(parts)
+    if len(items_text) > 80000:
+        items_text = items_text[:80000] + "\n\n[... troncato]"
+
+    base_prompt = L3_USER_SYNTHESIS_PROMPT.format(
+        brand=brand, model=model, items_text=items_text,
+    )
+
+    async def _call_and_parse(prompt_text: str, attempt_label: str) -> tuple[dict | None, str]:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 6000,
+                    "messages": [{"role": "user", "content": prompt_text}],
+                },
+            )
+            if resp.status_code != 200:
+                logger.error(
+                    f"Claude L3-synthesis [{attempt_label}] API {resp.status_code}: "
+                    f"{resp.text[:300]}"
+                )
+                return None, ""
+            data = resp.json()
+        text = ""
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text += block.get("text", "")
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+        try:
+            return json.loads(text), text
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"Claude L3-synthesis [{attempt_label}] JSON error: {e} "
+                f"| raw[0:400]={text[:400]!r}"
+            )
+            return None, text
+
+    try:
+        result, raw = await _call_and_parse(base_prompt, "attempt-1")
+
+        if result is None:
+            retry_prompt = (
+                base_prompt
+                + "\n\n---\nRITENTATIVO: il tentativo precedente ha prodotto JSON malformato. "
+                "Rigenera l'output assicurandoti che NESSUNA stringa contenga virgolette doppie "
+                "non escapate. Usa SEMPRE «...» o l'apostrofo ' al posto della virgoletta doppia \". "
+                "Verifica che il JSON sia perfettamente parseabile prima di restituirlo."
+            )
+            result, raw = await _call_and_parse(retry_prompt, "attempt-2-retry")
+
+        if result is None:
+            logger.error(
+                f"L3 synthesis failed for {brand} {model} after 2 attempts. "
+                f"Last raw response (truncated): {raw[:600]!r}"
+            )
+            return None
+
+        result.setdefault("is_l3_synthesis", True)
+        for key in ("apprezzamenti_utenti", "critiche_problematiche",
+                    "driver_acquisto", "domande_ricorrenti"):
+            v = result.get(key) or []
+            if key == "driver_acquisto":
+                v = [d for d in v if isinstance(d, dict) and d.get("driver")]
+            else:
+                v = [d for d in v if isinstance(d, dict) and d.get("tema")]
+            result[key] = v[:5]
+
+        sent = result.get("sentiment_globale")
+        if isinstance(sent, dict) and not sent.get("n_commenti_analizzati"):
+            sent["n_commenti_analizzati"] = total_user_comments
+
+        # Server-computed: more reliable than letting the model count thread types.
+        result["fonti_per_tipo"] = per_type_threads
+
+        logger.warning(
+            f"L3 synthesis for {brand} {model}: "
+            f"{len(result['apprezzamenti_utenti'])} plus, "
+            f"{len(result['critiche_problematiche'])} minus, "
+            f"{len(result['driver_acquisto'])} driver, "
+            f"{len(result['domande_ricorrenti'])} questions, "
+            f"{total_user_comments} commenti su {sum(per_type_threads.values())} thread"
+        )
+        return result
+
+    except Exception as e:
+        logger.error(f"Claude L3-synthesis error: {e}")
+        return None
+
+
 async def discover_trim_slugs(content: str, brand: str, model: str) -> list[str]:
     """Mini-call to Claude Haiku: identify trim/allestimento slugs from the model page.
 
