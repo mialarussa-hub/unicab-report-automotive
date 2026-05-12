@@ -5,6 +5,73 @@ nel repo UNICAB. Contiene le regole di ingaggio specifiche del progetto.
 
 ---
 
+## 🚨 REGOLA MASTER #1 — Worktree vs repo principale (CRITICO)
+
+**Il PM AI in Cowork legge e scrive SEMPRE nella repo principale**
+(`D:\PROGETTI\UNICAB\Piattaforma`). Tu (Claude Code) puoi invece
+trovarti in due posti diversi:
+
+1. **Repo principale** (`D:\PROGETTI\UNICAB\Piattaforma`) — stesso
+   filesystem del PM. Vedi le sue modifiche immediatamente.
+2. **Worktree** (`D:\PROGETTI\UNICAB\Piattaforma\.claude\worktrees\<nome>`)
+   — branch separato. **NON vedi i file scritti dal PM** finché non
+   guardi esplicitamente la repo principale (i file `pm/` modificati
+   dal PM arrivano al tuo worktree solo dopo commit + merge nel tuo branch).
+
+### Conseguenza operativa
+
+**A INIZIO SESSIONE, controlla SEMPRE dove ti trovi:**
+
+```bash
+git rev-parse --show-toplevel    # working tree corrente
+git worktree list                # tutti i worktree
+```
+
+**Se sei in un worktree**, anche con `git status` clean nel worktree:
+
+1. **Controlla SEMPRE anche la repo principale**:
+   ```bash
+   git -C D:/PROGETTI/UNICAB/Piattaforma status
+   git -C D:/PROGETTI/UNICAB/Piattaforma log --oneline -5
+   ```
+2. **I file `pm/` (FEEDBACK, SPRINT, handoff, DONE, ecc.) li leggi e
+   modifichi DIRETTAMENTE nella repo principale** (path assoluti tipo
+   `D:\PROGETTI\UNICAB\Piattaforma\pm\...`), **non nel worktree**.
+   Altrimenti il PM non vede mai le tue modifiche.
+3. **Le operazioni git su `pm/` le fai sulla repo principale**:
+   ```bash
+   git -C D:/PROGETTI/UNICAB/Piattaforma add pm/
+   git -C D:/PROGETTI/UNICAB/Piattaforma commit -m "..."
+   git -C D:/PROGETTI/UNICAB/Piattaforma push
+   ```
+
+### Check di inizio sessione (versione aggiornata)
+
+1. **`git rev-parse --show-toplevel`** — capisci dove sei
+2. **Se in worktree**: `git -C <repo-principale> status` per vedere
+   se il PM ha lasciato modifiche
+3. **`git pull --ff-only` in ENTRAMBE** (worktree + repo principale se è dietro)
+4. **Leggi `pm/pm-agent/FEEDBACK.md`** *dalla repo principale*
+5. **Leggi `pm/SPRINT.md`** *dalla repo principale*
+6. **Leggi handoff aperti** in `pm/pm-agent/handoff-*.md` *dalla repo principale*
+
+### Quando lavori solo su codice (non `pm/`)
+
+Se la sessione è puramente tecnica (modifichi `backend/`, `frontend/`,
+ecc.) sul branch del worktree, va bene restare lì. La regola scatta
+**quando devi leggere/scrivere `pm/` o sincronizzare lavoro con il PM**.
+
+### Perché questa regola esiste
+
+Il 2026-05-12 Ale ha notato che 4 handoff scritti dal PM in mattinata
+non li vedevo perché stavo in un worktree (`.claude/worktrees/...`)
+con `git status` clean e `git pull` "Already up to date" — mentre nella
+repo principale c'erano 4 file `pm/pm-agent/handoff-2026-05-12-*.md`
+non committati. Disallineamento silenzioso. Questa regola previene
+quel modo di fallimento.
+
+---
+
 ## 📋 Project Management — leggi prima `pm/`
 
 Questo progetto ha un **sistema di project management coordinato** tra

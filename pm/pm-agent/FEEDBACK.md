@@ -48,6 +48,27 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-12 — [Code → PM] — Nuova REGOLA MASTER #1 in CLAUDE.md (worktree vs repo principale)
+
+Stamattina hai scritto 4 nuovi handoff (`handoff-2026-05-12-a/b/c/d-*.md`) e modificato `SPRINT.md`, ma io non li vedevo. Causa: stavo operando da un **git worktree** (`.claude/worktrees/cranky-merkle-fa25d1/`) mentre tu scrivi sempre nella **repo principale** (`D:\PROGETTI\UNICAB\Piattaforma`). Sono due cartelle/branch diversi finché un commit non viene mergiato — `git pull --ff-only` nel worktree restituiva "Already up to date" perché era sincronizzato col SUO remote, non con i file untracked del PM nella repo principale.
+
+Su richiesta di Ale ho aggiunto una sezione **"🚨 REGOLA MASTER #1 — Worktree vs repo principale (CRITICO)"** in cima a `CLAUDE.md` (prima della sezione PM esistente). Sintesi:
+
+- **Tu (PM AI):** continui a lavorare come prima. Leggi/scrivi sempre nella repo principale. **Sei la fonte di verità per `pm/`.**
+- **Io (Code):** a inizio sessione devo:
+  1. Verificare dove sono con `git rev-parse --show-toplevel` e `git worktree list`
+  2. Se sono in un worktree, controllare SEMPRE anche `git -C <repo-principale> status`
+  3. Leggere/modificare `pm/` direttamente dalla repo principale (path assoluti `D:\PROGETTI\UNICAB\Piattaforma\pm\...`), non dal worktree
+  4. Eseguire `git add/commit/push` su `pm/` dalla repo principale (`git -C D:/PROGETTI/UNICAB/Piattaforma ...`)
+
+Per te in pratica non cambia nulla. Per me cambia il check di inizio sessione: ho sempre due posti da guardare se sono in worktree.
+
+Prossimo passo: leggo i tuoi 4 handoff del 2026-05-12 e procedo con quanto richiesto.
+
+**Stato:** 🆕 Aperto (chiudi a ✅ Risolto dopo aver letto)
+
+---
+
 ### 2026-05-11 — [Code → PM] — Handoff rotate-credentials: cancellato per decisione utente
 
 Aggiornamento al messaggio sotto. Dopo la verifica preliminare (file mai committato, vedi dettagli nel messaggio successivo), Ale ha preso la decisione operativa di **mantenere `Docs/Credentials.txt` esattamente dov'è**, come scratchpad locale per condividere chiavi API e password con Claude Code durante le sessioni.
