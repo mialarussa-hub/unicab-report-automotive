@@ -10,10 +10,11 @@
 
 | Priorità | Task | Stato | Note |
 |---|---|---|---|
-| P0 | Verifica + completamento **L3 commenti** | ⏳ | Stima ~8h+. Era da chiudere entro 5 maggio (call Paolo), in realtà non è chiuso. [handoff Code] Ground truth: cosa è già live di L3 (sentiment, ingest commenti YouTube/Reddit/forum), cosa manca per chiudere. Riportare in FEEDBACK con stima residua. |
-| P0 | Test **"solo YouTube"** vs L2 completo | ⏳ | Verificare se YouTube editoriale da solo è sufficiente per il prototipo, o se servono anche le testate news. Output: decisione di scope L2. [handoff Code] da disegnare quando l'approccio è chiaro. |
-| P0 | **L4 campagne adv** — approfondire bozza | ⏳ | Esiste solo una bozza, va approfondita prima di passare a Code. Task di disegno (Ale): scope, fonti (Facebook Ads Library + Google Ads), output atteso, integrazione con L2/L3. Da L4 disegnato → handoff esecuzione. |
-| P1 | Scheda **"prestazioni"** in L1 | ⏳ | Preso con Paolo. Test su Honda Jazz e modelli segmento C/D. [handoff Code] dopo che disegno scheda è stato discusso. |
+| P0 | Verifica + completamento **L3 commenti** | ⏳ | Ground truth + stima residua per call Paolo 14/5 → pm/pm-agent/handoff-2026-05-12-a-l3-ground-truth.md |
+| P0 | Test **"solo YouTube"** vs L2 completo | ⏳ | Confronto side-by-side per scope decision con Paolo in call 14/5 → pm/pm-agent/handoff-2026-05-12-b-test-solo-youtube.md |
+| P0 | **L4 campagne adv** — approfondire bozza | ⏳ | Esiste solo una bozza, va approfondita prima di passare a Code. Task di disegno (Ale): scope, fonti (Facebook Ads Library + Google Ads), output atteso, integrazione con L2/L3. Da L4 disegnato → handoff esecuzione. Da preparare per call 14/5. |
+| P1 | Output presentabile call Paolo (Anteprima UI) | ⏳ | Rendere navigabili in "Anteprima" i 2 minireport prodotti dal test solo YouTube → pm/pm-agent/handoff-2026-05-12-c-output-presentabile-paolo.md |
+| P1 | Scheda **"Prestazioni"** in L1 + verifica Heritage / Lifestyle | ⏳ | Promozione di 3 driver "non comunicati" a card visibili + numeri-chiave prestazionali come evidence → pm/pm-agent/handoff-2026-05-12-d-scheda-prestazioni-l1.md |
 | P1 | _(triggered)_ Strutturare dataset prototipo | ⏸️ | Bloccato finché Paolo non manda numero auto (ipotesi 500-1000 modello+versione, da ridurre a pochi segmenti). |
 | P2 | _(triggered)_ Integrare 4° ibrido (Extended Range) | ⏸️ | **Declassato a P2 (2026-05-11):** è questione di sola nomenclatura, non un tema operativo. Bloccato finché Paolo non conferma nome esatto + modelli (Nissan/BYD), ma senza urgenza. |
 | P2 | ADR retroattivi: architettura 4-layer + scope Release 0.0 | ⏳ | Documentare scelte già prese in `pm/decisions/`. Utile perché stiamo costruendo il prototipo su queste fondamenta. |
@@ -43,9 +44,9 @@
 **Goal sprint:** chiudere L3, capire scope L2 finale (test "solo YouTube"), passare a L4 con piano operativo (non più solo bozza). Il prototipo "numero zero" deve avere L2+L3+L4 funzionanti per la Release 0.0 — vedi `pm/projects/release-0-0-prototipo.md`.
 
 **Calendario call Paolo:**
-- Ale lo sente lun 11-mag per fissare la prossima call
-- Probabile finestra mer 13 / gio 14 maggio
-- Aggiornamenti al PM via questa chat
+- ✅ **Confermata: giovedì 14/5 alle 15:30** (Paolo conferma via mail 12/5)
+- Scaletta concordata con PM: (a) stato L3, (b) test solo YouTube + decisione scope L2, (c) L4 adv bozza, (d) scheda prestazioni L1, (e) pending Paolo (numero modelli prototipo, intestazione fatture)
+- Prep call: 3 handoff aperti per Code (12-05 a/b/c), L4 e scheda prestazioni in carico ad Ale come disegno
 
 **Pending Paolo (dalla call 4 maggio + mail 23 aprile):**
 - Numero auto prototipo (ipotesi 500-1000 → ridurre a pochi segmenti)
