@@ -225,6 +225,13 @@ function renderResultsInto(container, data, fromSession = false) {
             if (synthCard) body.appendChild(synthCard);
         }
 
+        // L3 minireport: card consolidata in cima alla sezione commenti utenti.
+        // Aggrega forum/yt user/reddit + cross-import dei commenti dei video editoriali L2.
+        if (level.key === 'L3' && data.l3_synthesis && typeof data.l3_synthesis === 'object') {
+            const synthCard = renderL3Synthesis(data.l3_synthesis);
+            if (synthCard) body.appendChild(synthCard);
+        }
+
         for (const source of sources) {
             body.appendChild(createSourceCard(source, brandName));
         }
@@ -289,6 +296,126 @@ function renderL2Synthesis(synth) {
             <div class="synth-section">
                 <h4>Punti di debolezza secondo i giornalisti</h4>
                 ${buildList(debolezza)}
+            </div>
+            ${note}
+        </div>
+    `;
+    return card;
+}
+
+function renderL3Synthesis(synth) {
+    if (!synth || !synth.is_l3_synthesis) return null;
+    const sent = synth.sentiment_globale || {};
+    const apprezzamenti = Array.isArray(synth.apprezzamenti_utenti) ? synth.apprezzamenti_utenti : [];
+    const critiche = Array.isArray(synth.critiche_problematiche) ? synth.critiche_problematiche : [];
+    const driver = Array.isArray(synth.driver_acquisto) ? synth.driver_acquisto : [];
+    const domande = Array.isArray(synth.domande_ricorrenti) ? synth.domande_ricorrenti : [];
+    const fontiPerTipo = synth.fonti_per_tipo && typeof synth.fonti_per_tipo === 'object' ? synth.fonti_per_tipo : {};
+
+    const card = document.createElement('div');
+    card.className = 'source-card l3-synthesis-card';
+
+    const sentiment = (sent.dominante || 'neutro').toLowerCase();
+    const sentimentClass = ['positivo', 'neutro', 'misto', 'critico'].includes(sentiment) ? sentiment : 'neutro';
+
+    const buildThemeList = (items) => {
+        if (!items.length) return '<p class="synth-empty">Nessun tema ricorrente individuato nel pacchetto.</p>';
+        return '<ul class="synth-themes">' + items.map(t => {
+            const fonti = Array.isArray(t.fonti) ? t.fonti : [];
+            const fontiHtml = fonti.length
+                ? `<div class="synth-fonti">Fonti: ${fonti.map(f => `<a href="${escapeHtml(f)}" target="_blank" rel="noopener">${escapeHtml(shortenUrl(f))}</a>`).join(', ')}</div>`
+                : '';
+            return `<li>
+                <div class="synth-tema">${escapeHtml(t.tema || '')}</div>
+                <div class="synth-descr">${escapeHtml(t.descrizione || '')}</div>
+                ${fontiHtml}
+            </li>`;
+        }).join('') + '</ul>';
+    };
+
+    const buildDriverList = (items) => {
+        if (!items.length) return '<p class="synth-empty">Nessun driver di acquisto ricorrente individuato.</p>';
+        return '<ul class="synth-themes">' + items.map(d => {
+            const dir = (d.direzione || '').toLowerCase();
+            const dirClass = dir === 'pro' ? 'driver-pro' : (dir === 'contro' ? 'driver-contro' : '');
+            const dirLabel = dir === 'pro' ? 'Pro' : (dir === 'contro' ? 'Contro' : (d.direzione || ''));
+            return `<li>
+                <div class="synth-tema">
+                    ${escapeHtml(d.driver || '')}
+                    ${dirLabel ? `<span class="driver-direction ${dirClass}">${escapeHtml(dirLabel)}</span>` : ''}
+                </div>
+                <div class="synth-descr">${escapeHtml(d.descrizione || '')}</div>
+            </li>`;
+        }).join('') + '</ul>';
+    };
+
+    const buildQuestionList = (items) => {
+        if (!items.length) return '<p class="synth-empty">Nessuna domanda ricorrente individuata.</p>';
+        return '<ul class="synth-themes">' + items.map(q => {
+            const esempi = Array.isArray(q.esempi) ? q.esempi : [];
+            const esempiHtml = esempi.length
+                ? `<ul class="synth-questions-examples">${esempi.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>`
+                : '';
+            return `<li>
+                <div class="synth-tema">${escapeHtml(q.tema || '')}</div>
+                ${esempiHtml}
+            </li>`;
+        }).join('') + '</ul>';
+    };
+
+    const distrib = sent.distribuzione || {};
+    const distribHtml = (distrib.positivi || distrib.neutri || distrib.critici)
+        ? `<div class="synth-distrib">
+            <span class="distrib-pill sentiment-positivo">${distrib.positivi || 0} positivi</span>
+            <span class="distrib-pill sentiment-neutro">${distrib.neutri || 0} neutri</span>
+            <span class="distrib-pill sentiment-critico">${distrib.critici || 0} critici</span>
+          </div>`
+        : '';
+
+    const fontiPillsHtml = Object.keys(fontiPerTipo).length
+        ? '<div class="synth-fonti-tipo">' + Object.entries(fontiPerTipo).map(([k, v]) =>
+            `<span class="fonte-pill fonte-${escapeHtml(k)}">${escapeHtml(k)}: ${v}</span>`
+          ).join('') + '</div>'
+        : '';
+
+    const note = synth.note_metodologiche
+        ? `<div class="synth-note"><strong>Note metodologiche:</strong> ${escapeHtml(synth.note_metodologiche)}</div>`
+        : '';
+
+    card.innerHTML = `
+        <div class="source-header">
+            <div class="source-title">
+                <span class="source-icon">💬</span>
+                <h3>Minireport L3 — Sintesi voce utenti</h3>
+                <span class="status-badge status-ok">Sintesi AI</span>
+            </div>
+        </div>
+        <div class="l3-synth-body">
+            <div class="synth-section">
+                <h4>Sentiment globale</h4>
+                <div class="synth-tono">
+                    <span class="synth-sentiment-badge sentiment-${sentimentClass}">${escapeHtml(sent.dominante || 'neutro')}</span>
+                    <span class="synth-comment-count">${sent.n_commenti_analizzati || 0} commenti analizzati</span>
+                </div>
+                ${distribHtml}
+                <p class="synth-descr">${escapeHtml(sent.descrizione || '')}</p>
+                ${fontiPillsHtml}
+            </div>
+            <div class="synth-section">
+                <h4>Cosa apprezzano gli utenti</h4>
+                ${buildThemeList(apprezzamenti)}
+            </div>
+            <div class="synth-section">
+                <h4>Critiche e problematiche segnalate</h4>
+                ${buildThemeList(critiche)}
+            </div>
+            <div class="synth-section">
+                <h4>Driver di acquisto</h4>
+                ${buildDriverList(driver)}
+            </div>
+            <div class="synth-section">
+                <h4>Domande ricorrenti</h4>
+                ${buildQuestionList(domande)}
             </div>
             ${note}
         </div>
