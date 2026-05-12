@@ -272,7 +272,10 @@ async def run_test_scrape(
         if total_l3_comments >= L3_MIN_COMMENTS:
             from src.content_cleaner import analyze_l3_user_synthesis
             try:
-                l3_synthesis = await analyze_l3_user_synthesis(l3_items, brand, model)
+                l3_synthesis = await analyze_l3_user_synthesis(
+                    l3_items, brand, model,
+                    alimentazione=alimentazione, cilindrata=cilindrata,
+                )
             except Exception as e:
                 logger.error(f"L3 synthesis call raised: {e}")
         else:

@@ -992,7 +992,13 @@ L3_USER_SYNTHESIS_PROMPT = """Sei un analista che sintetizza la VOCE DEGLI UTENT
 
 Ricevi un pacchetto di commenti scritti dal pubblico (NON dai giornalisti) su {brand} {model}, raccolti da forum specialistici auto, thread Reddit, video YouTube di utenti e commenti pubblicati sotto video editoriali (recensioni di canali professionali). Ogni elemento è un singolo thread/video con il suo elenco di commenti utenti.
 
-COMPITO: produrre un minireport sintetico che dia voce agli UTENTI, NON ai giornalisti. Il contenuto editoriale (articolo o trascrizione del giornalista) NON è incluso nel pacchetto — leggi e analizza solo i commenti.
+FILTRO TARGET (rigoroso):
+- Modello target: {brand} {model}{target_config}
+- I commenti raccolti possono parlare di altre versioni dello stesso nome (allestimenti diversi, generazioni precedenti, motorizzazioni diverse) o di altri modelli dello stesso brand. Questo e' rumore inevitabile dello scraping.
+- REGOLA: includi nella sintesi SOLO il materiale che riguarda il modello target. Se un commento confronta il target con altre versioni, estrai SOLO quello che dice sul target. Se un commento parla esclusivamente di altre versioni/modelli, IGNORALO completamente (non contarlo in `n_commenti_analizzati`, non citare la sua fonte, non includere i suoi temi).
+- Quando un commento e' ambiguo (non e' chiaro se parli del target o di un'altra versione), prevali l'ipotesi piu' restrittiva: scartalo.
+
+COMPITO: produrre un minireport sintetico che dia voce agli UTENTI, NON ai giornalisti. Il contenuto editoriale (articolo o trascrizione del giornalista) NON e' incluso nel pacchetto — leggi e analizza solo i commenti.
 
 OUTPUT (restituisci ESATTAMENTE questa struttura, UN solo oggetto JSON):
 
@@ -1060,10 +1066,16 @@ PACCHETTO COMMENTI UTENTI:
 
 async def analyze_l3_user_synthesis(
     items: list[dict], brand: str, model: str,
+    alimentazione: str | None = None, cilindrata: float | None = None,
 ) -> dict | None:
     """Generate a synthetic L3 minireport from user comments aggregated across
     forum + youtube (user) + reddit/social + cross-imported comments from L2
     youtube_editorial items.
+
+    `alimentazione` and `cilindrata` are propagated from the session filters
+    (admin UI) and used to build the FILTRO TARGET section of the prompt, so
+    Claude can semantically discard comments that talk about other variants of
+    the same name (different powertrain, different generation, etc).
 
     Each `items[i]` is expected to expose `ai_comments` (list of {text,...}),
     `url`, `title` and `_source_type` (annotation set by the caller). Items
@@ -1077,6 +1089,15 @@ async def analyze_l3_user_synthesis(
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key or not items:
         return None
+
+    # Build "target configuration" hint for the FILTRO TARGET section.
+    # Empty when no powertrain/displacement filter was applied → prompt stays generic.
+    cfg_bits: list[str] = []
+    if alimentazione:
+        cfg_bits.append(alimentazione)
+    if cilindrata is not None:
+        cfg_bits.append(f"{cilindrata:g}L")
+    target_config = f" — configurazione: {', '.join(cfg_bits)}" if cfg_bits else ""
 
     parts = []
     total_user_comments = 0
@@ -1119,7 +1140,7 @@ async def analyze_l3_user_synthesis(
         items_text = items_text[:80000] + "\n\n[... troncato]"
 
     base_prompt = L3_USER_SYNTHESIS_PROMPT.format(
-        brand=brand, model=model, items_text=items_text,
+        brand=brand, model=model, target_config=target_config, items_text=items_text,
     )
 
     async def _call_and_parse(prompt_text: str, attempt_label: str) -> tuple[dict | None, str]:
