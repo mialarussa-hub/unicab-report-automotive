@@ -5,7 +5,23 @@
 **A:** Claude Code
 **Priorità:** P1
 **Stima rough:** S-M (dipende dallo stato attuale di "Anteprima")
-**Stato:** 🆕 Nuovo
+**Stato:** ❌ **CANCELLATO 2026-05-13** — vedi nota in cima
+
+---
+
+## ❌ Cancellazione (2026-05-13)
+
+Handoff cancellato da Ale: la sezione "Anteprime" su
+`https://unicab.automica.it` **esiste già** ed è esattamente
+l'interfaccia di consultazione attesa (lista sessioni di scraping con
+filtri motore, minireport L2/L3 espandibili, già usata per le demo
+screen-sharing con Paolo). I minireport prodotti dal nuovo flusso
+**L2YT** (handoff `b`) confluiranno automaticamente in Anteprime
+come quelli L2 standard, senza lavoro UI dedicato.
+
+**Azione per Code:** non eseguire questo handoff. Spostalo in
+`pm/pm-agent/handoff-archive/` al prossimo push con commit prefix
+`chore(pm): archive handoff-c cancellato`.
 
 ---
 

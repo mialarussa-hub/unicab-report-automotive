@@ -22,30 +22,52 @@ Questa è probabilmente la cosa più importante da portare alla call:
 
 ## Obiettivo
 
-Produrre, per 1-2 modelli auto, **due minireport L2 a confronto** sullo
+Produrre, per 1-2 modelli auto, **due minireport a confronto** sullo
 stesso modello e stesso intervallo temporale:
 - A) **L2 completo** — YouTube editoriali (4 canali) + 8 testate news
-- B) **L2 solo YouTube** — solo i 4 canali editoriali YouTube
+- B) **L2YT** — solo i 4 canali editoriali YouTube
 
 In modo che Ale (e Paolo in call) possano valutare side-by-side cosa
 si perde escludendo le testate scritte.
 
+## Requisito strutturale (decisione Ale 2026-05-13)
+
+**L2YT non è un test one-shot, è un flusso permanente.** Va
+introdotto come **secondo flusso parallelo a L2** (filtro/variante
+`L2YT`), in modo che resti nel sistema dopo la call e possa essere
+rilanciato in futuro per confronti su altri modelli senza dover
+rifare patch temporanee.
+
+Il flusso L2 standard (8 testate + 4 YouTube) **non si tocca e non si
+disabilita** — continua a esistere com'è. Si aggiunge L2YT come
+variante selezionabile, in parallelo.
+
+Naming convenzionale: **`L2YT`** (es. come `source_type`, label UI,
+chiave config, etichetta minireport — usare la stessa sigla ovunque
+per leggibilità).
+
 ## Acceptance Criteria
 
+- [ ] **L2YT esiste come flusso parallelo a L2**, selezionabile dal
+      sistema (non è un branch temporaneo né un flag locale "una
+      tantum"). Il flusso L2 standard resta intatto.
 - [ ] Scelti 1-2 modelli auto rappresentativi (suggerimento: uno mass
       market + uno premium, oppure due segmenti diversi — proporre a
       PM/Ale prima di lanciare lo scrape se non ovvio)
-- [ ] Ingestion completata per entrambi i flussi (A e B) sullo stesso
-      intervallo temporale, con dati salvati in DB e tracciabili
+- [ ] Ingestion completata per entrambi i flussi (L2 e L2YT) sullo
+      stesso modello e intervallo temporale, con dati salvati in DB
+      e tracciabili (distinguibili per tipo di flusso)
 - [ ] Generati i due minireport AI a confronto (sintesi
-      media/giornalisti per A; sintesi solo YouTube per B)
-- [ ] Output **accessibile** ad Ale prima della call: idealmente
-      visibile nell'area "Anteprima" della piattaforma
-      (`https://unicab.automica.it`) → vedi handoff `c` per la parte
-      di presentazione UI se serve frontend dedicato
+      media/giornalisti per L2; sintesi solo YouTube per L2YT)
+- [ ] Output **accessibile** ad Ale prima della call: visibile
+      nell'area "Anteprime" della piattaforma
+      (`https://unicab.automica.it`). La sezione esiste già e mostra
+      le sessioni di scraping con minireport L2/L3 — il flusso L2YT
+      deve confluire lì come gli altri (etichetta chiara `L2YT` vs
+      `L2`)
 - [ ] Riportato in `pm/pm-agent/FEEDBACK.md` un breve riepilogo
       tecnico: modelli scelti, intervallo, dove guardare i risultati,
-      eventuali anomalie
+      come si lancia un L2YT in futuro, eventuali anomalie
 
 ## File coinvolti (sospetti)
 
@@ -57,9 +79,13 @@ si perde escludendo le testate scritte.
 
 ## Vincoli / non-goals
 
-- **Non rimuovere/disabilitare le testate news dal codice.** Il test
-  serve a confrontare, non a togliere. Se serve un flag/parametro
-  temporaneo per girare solo YouTube, ok; non patchare via.
+- **Non rimuovere/disabilitare le testate news dal codice.** L2YT
+  affianca L2, non lo sostituisce. L2 standard deve continuare a
+  funzionare identico.
+- **Non improvvisare il naming.** Usare `L2YT` come sigla unica per
+  source_type, label UI, chiave config, etichetta minireport. Se
+  l'architettura impone una variante (es. `l2_yt`, `l2-yt`), ok
+  pragmaticamente — ma una sola variante, coerente ovunque.
 - Non aprire ADR sullo scope L2 in questo handoff — la decisione la
   prende Ale con Paolo in call e poi eventualmente arriva un nuovo
   handoff "consolidamento scope L2".
