@@ -45,8 +45,14 @@
 
 **Calendario call Paolo:**
 - ✅ **Confermata: giovedì 14/5 alle 15:30** (Paolo conferma via mail 12/5)
-- Scaletta concordata con PM: (a) stato L3, (b) test solo YouTube + decisione scope L2, (c) L4 adv bozza, (d) scheda prestazioni L1, (e) pending Paolo (numero modelli prototipo, intestazione fatture)
-- Prep call: 3 handoff aperti per Code (12-05 a/b/c), L4 e scheda prestazioni in carico ad Ale come disegno
+- Scaletta concordata con PM: (a) stato L3, (b) L2YT + decisione scope L2, (c) L4 adv (disegno appena fatto), (d) scheda Prestazioni L1, (e) **onestà tecnica: bug cap items_text fixato** (minireport L2 grandi pre-13/5 sotto-rappresentati), (f) pending Paolo (numero modelli prototipo, intestazione fatture)
+- **Mattina 14/5 — sessione disegno L4 (Ale + PM)**: ragionare insieme su opportunità reali delle piattaforme adv (Facebook Ads Library, Google Ads, eventuali altre) → arrivare alla call con bozza presentabile, e successivamente trasformarla in handoff per Code
+
+**Stato task chiusi 2026-05-13:**
+- L2YT ✅ (commit `2cd74fc`)
+- Scheda Prestazioni L1 ✅ (commit `f907ba5`, scope ridotto su decisione Ale)
+- Bug fix cap items_text 80k → 600k ✅ (commit `bcb716d` + `4bcf66c`, emerso durante test L2YT)
+- Anteprima UI ❌ Cancellato (doppione: Anteprime esiste già)
 
 **Pending Paolo (dalla call 4 maggio + mail 23 aprile):**
 - Numero auto prototipo (ipotesi 500-1000 → ridurre a pochi segmenti)

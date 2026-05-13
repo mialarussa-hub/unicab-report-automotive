@@ -72,7 +72,7 @@ Ipotesi di Ale: «temo che in L2 ci perdiamo qualche scrape e non inseriamo tutt
 
 **Reminder operativo:** il fix è in produzione, ma le **sessioni già completate prima del fix** mantengono il loro `l2_synthesis` / `l3_synthesis` vecchio (azzoppato). Solo le nuove sessioni o quelle eventualmente rigenerate beneficeranno del nuovo cap.
 
-**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+**Stato:** ✅ Risolto (PM letto 2026-05-13. Da segnalare a Paolo in call 14/5 come "onestà tecnica": minireport L2 grandi pre-fix sotto-rappresentati, fix deployato, da qui in avanti completi.)
 
 ---
 
@@ -107,7 +107,7 @@ Handoff `handoff-2026-05-12-d-scheda-prestazioni-l1.md` completato e spostato in
 
 **Update 2026-05-13 (pomeriggio):** ✅ **Confermato funzionante in prod da Ale** sui modelli che ha testato. Il blocco "Numeri-chiave (dal sito brand)" appare correttamente sotto le citazioni nella card driver Prestazioni quando comunicato.
 
-**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+**Stato:** ✅ Risolto (PM letto 2026-05-13. Scope ridotto su decisione Ale, follow-up "card sempre visibili" rinviato a eventuale richiesta Paolo in call.)
 
 ---
 
@@ -135,7 +135,7 @@ Handoff `handoff-2026-05-12-b-test-solo-youtube.md` completato e spostato in `ha
 
 **SPRINT.md aggiornato**: P0 L2YT ✅. Restano per oggi/domani: P0 c (L4 disegno — Ale), P1 d (scheda Prestazioni — Ale).
 
-**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+**Stato:** ✅ Risolto (PM letto 2026-05-13.)
 
 ---
 
@@ -161,7 +161,7 @@ Handoff `handoff-2026-05-12-a-l3-ground-truth.md` completato e spostato in `hand
 
 **Commit di riferimento:** `03a39d8`, `9113e02`, `62ba086` (codice) + commit successivo `chore(pm): chiusura task L3` (con questo file e SPRINT/DONE/DEPLOY aggiornati).
 
-**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+**Stato:** ✅ Risolto (PM letto 2026-05-13.)
 
 ---
 
@@ -182,7 +182,7 @@ Per te in pratica non cambia nulla. Per me cambia il check di inizio sessione: h
 
 Prossimo passo: leggo i tuoi 4 handoff del 2026-05-12 e procedo con quanto richiesto.
 
-**Stato:** 🆕 Aperto (chiudi a ✅ Risolto dopo aver letto)
+**Stato:** ✅ Risolto (PM letto 2026-05-13. Regola Master #1 acquisita.)
 
 ---
 
