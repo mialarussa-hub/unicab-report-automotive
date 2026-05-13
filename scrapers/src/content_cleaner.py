@@ -908,16 +908,17 @@ async def analyze_l2_media_synthesis(
 
     items_text = "\n\n===\n\n".join(parts)
     raw_len = len(items_text)
-    # Cap a 300k char (~75k token) — Claude Sonnet 4 ha context 200k token,
-    # quindi qui restiamo larghi. Il cap precedente a 80k tagliava in modo
-    # severo le sessioni L2 con piu' di ~15-20 item (es. una L2 standard a
-    # 60 risultati: solo ~10-15 item arrivavano davvero al modello, e i temi
-    # critici degli item troncati venivano persi — diagnosi 2026-05-13 da
-    # confronto L2/L2YT su Fiat Grande Panda).
-    if raw_len > 300000:
-        items_text = items_text[:300000] + "\n\n[... troncato]"
+    # Cap a 600k char (~150k token). Claude Sonnet 4 ha context 200k token,
+    # con prompt skeleton ~500 tok + output max 6k tok restano ~43k tok di
+    # margine. Il cap precedente a 80k tagliava in modo severo le sessioni
+    # L2 con piu' di ~15-20 item (es. una L2 standard a 60 risultati: solo
+    # ~10-15 item arrivavano davvero al modello, e i temi critici degli
+    # item troncati venivano persi — diagnosi 2026-05-13 da confronto
+    # L2/L2YT su Fiat Grande Panda).
+    if raw_len > 600000:
+        items_text = items_text[:600000] + "\n\n[... troncato]"
         logger.warning(
-            f"L2 synthesis items_text truncated: {raw_len} -> 300000 chars "
+            f"L2 synthesis items_text truncated: {raw_len} -> 600000 chars "
             f"({len(items)} items totali)"
         )
     else:
@@ -1177,14 +1178,15 @@ async def analyze_l3_user_synthesis(
 
     items_text = "\n\n===\n\n".join(parts)
     raw_len = len(items_text)
-    # Cap a 300k char (~75k token). Stesso motivo del cap L2: il vecchio
+    # Cap a 600k char (~150k token). Stesso motivo del cap L2: il vecchio
     # limite a 80k tagliava in modo severo le sessioni L3 con molti commenti
     # (es. 1700+ commenti su 60 thread non entrano tutti, vedi diagnosi
-    # 2026-05-13). Claude Sonnet 4 ha context 200k token, restiamo larghi.
-    if raw_len > 300000:
-        items_text = items_text[:300000] + "\n\n[... troncato]"
+    # 2026-05-13). Claude Sonnet 4 ha context 200k token, con prompt
+    # skeleton + output ~7k tok restano ~43k tok di margine.
+    if raw_len > 600000:
+        items_text = items_text[:600000] + "\n\n[... troncato]"
         logger.warning(
-            f"L3 synthesis items_text truncated: {raw_len} -> 300000 chars "
+            f"L3 synthesis items_text truncated: {raw_len} -> 600000 chars "
             f"({len(items)} items totali)"
         )
     else:
