@@ -48,6 +48,39 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-13 — [Code → PM] — Scheda Prestazioni chiusa ✅ con scope ridotto (handoff-d archiviato)
+
+Handoff `handoff-2026-05-12-d-scheda-prestazioni-l1.md` completato e spostato in `handoff-archive/`. Esito ✅ con **scope ridotto da decisione esplicita di Ale**.
+
+**Cosa è successo:**
+- Acceptance Criteria 2/6/7 (numeri-chiave nella card Prestazioni + test sui modelli + visibilità in Anteprime) → ✅ eseguiti.
+- Acceptance Criteria 1/3/4 (**promozione di Prestazioni / Heritage / Lifestyle a card sempre visibili anche con peso=0**) → **NON eseguiti per decisione di Ale**. Quando gli ho proposto la scelta UX prima di codificare, Ale ha risposto: «la card prestazioni deve funzionare come le altre card quando le info scarseggiano». Ho interpretato come "niente trattamento speciale per le 3 categorie target — comportamento standard come le altre 6". Quindi: peso > 0 → card; peso = 0 → riga "Driver non comunicati" in fondo, identico a tutte le altre 9 categorie.
+- Verifica preliminare ontologia (Acceptance Criterion 5): ✅ tutte e 9 le categorie target sono già in `DRIVER_TAXONOMY` (`scrapers/src/content_cleaner.py:582-592`) + nel prompt `DRIVER_ANALYSIS_PROMPT` che richiede tutti 9 driver con peso=0 inclusi. Frontend `DRIVER_LABELS` allineati. Nessun refactor ontologia.
+
+**Implementazione (3 file solo frontend):**
+- Nuovo blocco "Numeri-chiave (dal sito brand)" che appare sotto le citazioni nella card driver `prestazioni_guida` quando il driver è comunicato (peso > 0).
+- Tabella per versione: CV, kW, Nm, 0-100 s, V.max km/h. Extras: peso (kg), autonomia WLTP EV (km), peso/potenza (kg/CV calcolato).
+- Aggregazione cross-item dei dati `prestazioni_per_versione` / `consumi_per_versione` / `dimensioni.peso_kg` da `ai_official_info` degli items L1 sito brand, con dedup per (versione, alimentazione, cilindrata_cc).
+- Nessun cambio backend, nessun cambio prompt: i dati erano già estratti da `OFFICIAL_PROMPT`, mancava solo il rendering nel posto giusto.
+
+**Commit di riferimento:** `f907ba5` (codice + deploy) + commit successivo `chore(pm): chiusura task scheda Prestazioni` (questo file + SPRINT/DONE).
+
+**Deploy in prod 2026-05-13:** solo `git pull` + `docker compose restart nginx` (frontend ha bind-mount via `./frontend:/app/frontend`, niente rebuild necessario). Verifica: `_renderPerformanceEvidence` presente 2 volte nel JS servito da `https://unicab.automica.it/frontend/static/js/scraping_render.js`, pagine admin/anteprime HTTP 307 (atteso).
+
+**Da segnalare in call Paolo (se rilevante):**
+- Se Paolo in call conferma che vuole la card Prestazioni/Heritage/Lifestyle **sempre visibile** anche con peso=0 (visione originale dell'handoff PM, ricalibrata da Ale), l'estensione è banale: poche righe nel rendering del blocco `inactive` per renderizzare una "card shell" per le 3 categorie target invece di metterle nella riga in fondo. Tempo: ~10 min. Lo lascio come follow-up disponibile, non lo eseguo di mia iniziativa perché era esplicito il via di Ale per il comportamento "come le altre".
+- Per il test in prod: bastano 2 modelli — uno premium/sportivo (card popolata) + uno tipo Honda Jazz (card assente perché peso=0). Ale lo testa direttamente lui.
+
+**Follow-up tecnici nice-to-have (non bloccanti):**
+- Tempo di ricarica EV: oggi non estratto da `OFFICIAL_PROMPT` (consumi_per_versione ha solo `autonomia_elettrica_km`). Piccola estensione del prompt se richiesto in call.
+- Ripresa 80-120 km/h: idem, non oggi estratto. L'handoff lo elencava come "se disponibile" → conforme.
+
+**SPRINT.md aggiornato**: P1 scheda Prestazioni ✅. Restano per oggi/domani: P0 c (L4 disegno — Ale).
+
+**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+
+---
+
 ### 2026-05-13 — [Code → PM] — L2YT implementato e deployato ✅ (handoff-b archiviato)
 
 Handoff `handoff-2026-05-12-b-test-solo-youtube.md` completato e spostato in `handoff-archive/`. Esito ✅ pieno per la parte tecnica (acceptance criteria 1 e 5 — implementazione del flusso parallelo + integrazione Anteprime). I criteri 2, 3, 4 (scelta modelli + lancio scrape + minireport a confronto) li esegue **direttamente Ale in produzione** — decisione esplicita 2026-05-13: «il confronto lo farò io, a te non interessa quali modelli».

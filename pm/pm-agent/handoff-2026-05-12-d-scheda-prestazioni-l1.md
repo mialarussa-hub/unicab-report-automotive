@@ -5,7 +5,7 @@
 **A:** Claude Code
 **Priorità:** P1
 **Stima rough:** M (1-4h)
-**Stato:** 🆕 Nuovo
+**Stato:** ✅ Chiuso 2026-05-13 (con scope ridotto da decisione Ale — vedi Esito)
 
 ---
 
@@ -118,19 +118,49 @@ non solo nella riga di testo).
 
 ---
 
-## 📤 Esito (da compilare da Claude Code a fine task)
+## 📤 Esito (compilato da Claude Code 2026-05-13)
 
-**Esito:** ✅ / ❌
-**Cosa è stato fatto:**
-- ...
+**Esito:** ✅ con **scope ridotto** dalla decisione di Ale 2026-05-13.
 
-**File modificati:**
-- ...
+### Decisione di Ale che ha modificato lo scope
+- **Acceptance Criteria 1, 3, 4** (promozione di Prestazioni / Heritage / Lifestyle a card sempre visibili anche con peso=0) — **NON eseguiti**. Ale ha esplicitamente detto: «la card prestazioni deve funzionare come le altre card quando le info scarseggiano». Quindi tutte e 9 le categorie mantengono il comportamento standard: card quando peso > 0, riga "Driver non comunicati" in fondo quando peso = 0. Niente trattamento speciale per le 3 categorie target.
+- **Acceptance Criterion 5** (verifica ontologia) — ✅ verificato preliminarmente: tutte e 9 le categorie target sono già in `DRIVER_TAXONOMY` (`scrapers/src/content_cleaner.py:582-592`) e nel prompt `DRIVER_ANALYSIS_PROMPT` che richiede esplicitamente tutti 9 i driver con peso=0 inclusi. Frontend `DRIVER_LABELS` allineati (`scraping_render.js:41-51`, `scraping_test.js:1305-1316`). Nessun refactor d'ontologia necessario.
+- **Acceptance Criteria 2 + 6 + 7** (numeri-chiave nella card Prestazioni + test su modelli + visibilità in Anteprima) — ✅ eseguiti. La parte di test sui modelli la fa Ale direttamente in prod («i testi li faccio io! non t'interessa sapere su quali auto testerò»).
 
-**Commit:** `<hash>` _o_ "non committato, vedi diff"
+### Cosa è stato fatto
+- **Card driver `prestazioni_guida`** arricchita: quando il driver ha peso > 0, sotto le citazioni e l'attribuzione canali appare un nuovo blocco **"Numeri-chiave (dal sito brand)"** con:
+  - **Tabella per versione**: colonne Versione, CV, kW, Nm (coppia), 0-100 (s), V.max (km/h). Dedup per (versione, alimentazione, cilindrata_cc) per evitare doppioni cross-pagine.
+  - **Extras** (riga sotto la tabella, separati da ·): Peso curb (kg), Autonomia WLTP EV (km, massimo cross-versione), Peso/potenza (kg/CV) calcolato sul CV massimo disponibile.
+  - **Solo dati realmente estratti**: se un campo manca, non viene mostrato. Niente integrazione da fonti terze (come da vincolo handoff).
+- I dati provengono dai campi **già estratti** da `OFFICIAL_PROMPT` in `content_cleaner.py` (`prestazioni_per_versione`, `consumi_per_versione`, `dimensioni.peso_kg`) presenti per-item negli items L1 sito brand. **Nessun cambio backend, nessun cambio prompt.**
+- Aggregazione cross-item lato frontend: gli items L1 della stessa source-card (escluso quello con `is_driver_analysis=true`) vengono passati a `renderDriverAnalysis(info, items)` che li riusa solo per la card Prestazioni.
+- Stile coerente con le card driver esistenti: sfondo grigio chiaro (`#f8fafc`), border 1px slate-200, font 0.82rem, table compatta.
 
-**Note per il PM:**
-- ...
+### File modificati (3, solo frontend)
+- `frontend/static/js/scraping_render.js` (usato da Anteprime + viewer sessioni)
+- `frontend/static/js/scraping_test.js` (pagina admin Test Scraping)
+- `frontend/static/css/style.css` (classi `.driver-card-perf-evidence`, `.driver-card-perf-title`, `.driver-card-perf-table`, `.driver-card-perf-extras`)
 
-**Follow-up emersi:**
-- ...
+In entrambi i JS: nuovo helper `_collectPerformanceEvidence(items)` con dedup, helper di rendering `_renderPerformanceEvidence(items)`, signature estesa `renderDriverAnalysis(info, items=[])` e `renderOfficialInfo(info, items=[])`, call site della source-card L1 passa ora `restItems`.
+
+### Commit
+`f907ba5` (branch `claude/flamboyant-bohr-cb95ff` → merged in `main`).
+
+### Deploy
+2026-05-13. Solo `git pull` + `docker compose restart nginx` (frontend ha bind-mount `./frontend:/app/frontend` su api, niente rebuild necessario). Verifica: pagine admin/anteprime rispondono HTTP 307 (atteso), `_renderPerformanceEvidence` presente 2 volte nel JS servito da `https://unicab.automica.it/frontend/static/js/scraping_render.js`.
+
+### Vincoli rispettati
+- L1 framing invariato: "comunicazione brand" ≠ "dati tecnici". I numeri sono evidence sotto le citazioni, non l'oggetto principale della card.
+- Stile UI delle card esistenti replicato, non rifatto.
+- Nessuna fonte aggiunta oltre il sito brand (attribuzione "Canali: sito brand" invariata).
+- Ontologia driver non rifattorizzata oltre la conferma di completezza.
+
+### Note per il PM
+- **La scelta di non promuovere le 3 categorie a card sempre visibili è di Ale, non un'omissione di Code.** L'handoff originale prevedeva la promozione (criteri 1, 3, 4); Ale ha ricalibrato ribattendo che il comportamento deve essere «come le altre». Se in call con Paolo si conferma invece che Prestazioni *deve* avere visibilità anche a 0%, l'estensione è banale (un branch nel filtro `inactive` nel rendering driver-details per i 3 driver target). Lo annoto come follow-up disponibile.
+- Per il test in prod: bastano 2 modelli — uno che comunica le prestazioni (premium/sportivo) e uno che non le comunica (es. Honda Jazz, citato come esempio nell'handoff). Sul primo si vedrà la card popolata coi numeri-chiave, sul secondo la card non comparirà — ed è il comportamento "come le altre" voluto.
+- Test sui modelli li esegue direttamente Ale come per L2YT.
+
+### Follow-up emersi
+- **Tempo di ricarica** per EV: non è oggi estratto da `OFFICIAL_PROMPT` (consumi_per_versione ha solo `autonomia_elettrica_km`, non `tempo_ricarica`). Se in call viene richiesto esplicitamente, è una piccola estensione del prompt.
+- **Ripresa 80-120 km/h**: idem, non oggi estratto. L'handoff lo elencava come "se disponibile" → conforme.
+- **Visibilità sempre-on per i 3 driver target** (proseguimento dell'handoff originale): se Paolo conferma la richiesta in call, è un'estensione di poche righe nel rendering — riservare un branch `if (['prestazioni_guida','heritage_identita','lifestyle_emozione'].includes(d.driver))` nel loop inactive per renderizzare comunque la card-shell.

@@ -20,6 +20,17 @@
 
 ## Log
 
+### 2026-05-13 — Scheda Prestazioni in L1: numeri-chiave come evidence nella card driver
+
+- **Sprint:** 19-20 (settimana 1)
+- **Esecutore:** Claude Code
+- **Outcome:** La card driver L1 "Prestazioni & Piacere di guida" ora mostra, sotto le citazioni virgolettate del sito brand, un blocco "Numeri-chiave (dal sito brand)" con tabella per versione (CV, kW, Nm, 0-100, V.max) + extras (peso curb in kg, autonomia WLTP EV in km, rapporto peso/potenza in kg/CV calcolato). I dati provengono dai campi già estratti da `OFFICIAL_PROMPT` per ogni item L1 sito brand (`prestazioni_per_versione`, `consumi_per_versione`, `dimensioni.peso_kg`): nessun cambio backend, nessun cambio prompt. Aggregazione cross-item lato frontend con dedup per (versione, alimentazione, cilindrata_cc) per evitare doppioni quando più pagine del sito brand citano la stessa versione.
+- **Decisione di scope (Ale 2026-05-13):** i 3 driver target dell'handoff (`prestazioni_guida`, `heritage_identita`, `lifestyle_emozione`) NON sono stati "promossi" a card sempre visibili. Ale ha chiarito: «la card prestazioni deve funzionare come le altre card quando le info scarseggiano». Tutte e 9 le categorie mantengono il comportamento standard: card quando peso > 0, riga "Driver non comunicati" in fondo quando peso = 0. Verifica preliminare ontologia: tutte e 9 le categorie sono già presenti in `DRIVER_TAXONOMY` (`scrapers/src/content_cleaner.py:582-592`) e nel prompt `DRIVER_ANALYSIS_PROMPT`, e i frontend (`scraping_render.js`, `scraping_test.js`) hanno già `DRIVER_LABELS` corrispondenti.
+- **File modificati (3, solo frontend):** `frontend/static/js/scraping_render.js`, `frontend/static/js/scraping_test.js`, `frontend/static/css/style.css`. Aggiunti helper `_collectPerformanceEvidence(items)` e `_renderPerformanceEvidence(items)`; signature `renderDriverAnalysis(info, items=[])` estesa; call site `renderOfficialInfo(info, items)` aggiornata per propagare `restItems` (gli items L1 non driver-analysis della stessa source). CSS: classi `.driver-card-perf-evidence`, `.driver-card-perf-title`, `.driver-card-perf-table`, `.driver-card-perf-extras` coerenti con lo stile delle card driver esistenti.
+- **Note / link:** commit `f907ba5` (branch `claude/flamboyant-bohr-cb95ff` → merged in `main`). Deploy 2026-05-13: solo `git pull` + `docker compose restart nginx` (frontend ha bind-mount via `./frontend:/app/frontend` su api, niente rebuild richiesto). Verifica: pagine `/frontend/scraping-test` e `/frontend/anteprime` rispondono HTTP 307, `_renderPerformanceEvidence` presente 2 volte nel JS servito da prod (definizione + call site). Handoff archiviato in `handoff-archive/handoff-2026-05-12-d-scheda-prestazioni-l1.md`.
+
+---
+
 ### 2026-05-13 — L2YT: flusso parallelo a L2 (solo YouTube editoriali) implementato e deployato
 
 - **Sprint:** 19-20 (settimana 1)
