@@ -20,6 +20,19 @@
 
 ## Log
 
+### 2026-05-13 — L2YT: flusso parallelo a L2 (solo YouTube editoriali) implementato e deployato
+
+- **Sprint:** 19-20 (settimana 1)
+- **Esecutore:** Claude Code
+- **Outcome:** Introdotta una seconda fase di scraping `L2YT` permanente, accanto a L2 standard. L2YT interroga solo i 4 canali YouTube editoriali (Quattroruote, AlVolante, Motor1 Italia, DriveK) e produce lo stesso schema di minireport L2 (`l2_synthesis` in DB). L2 standard (8 testate news + 4 YouTube ed.) resta intatto. Selezionabile da admin "Test Scraping" → dropdown Fase, oppure via API.
+  - Backend `app/api/scraping_test.py`: aggiunta entry `"L2YT": {"youtube_editorial"}` in `PHASE_SOURCE_TYPES`, threshold `PHASE_MIN_MATCHES["L2YT"] = 1`, validazione phase estesa.
+  - Scrapers `content_cleaner.py:analyze_l2_media_synthesis()`: nuovo parametro `sources_used`. Quando contiene solo `youtube_editorial`, l'introduzione del prompt cambia per parlare esplicitamente di "solo trascrizioni video editoriali + commenti utenti sotto i video", evitando menzioni di testate scritte assenti (regola di non-invenzione).
+  - Scrapers `test_scrape.py`: aggregator L2 calcola `l2_sources_used` e lo passa alla synthesis.
+  - Frontend: nuova `<option value="L2YT">` nel dropdown admin; `PHASE_BADGES.L2YT` con label "L2YT YouTube" e classe CSS `phase-l2yt` (rosso tenue); helper `_normalizePhaseForRender()` per trattare L2YT come L2 nel rendering risultati e banner motore — i source_type restano `youtube_editorial` e ricadono naturalmente nella sezione L2 via `getLevel()`, mentre il badge della sessione mostra distintamente `L2YT YouTube`.
+- **Note / link:** commit `2cd74fc` (branch `claude/flamboyant-bohr-cb95ff` → merged in `main`). Deploy 2026-05-13: `git pull` + `docker compose build scrapers` + `docker compose up -d --force-recreate api scrapers` + `restart nginx`. Sanity check post-deploy: container Up, logs puliti, HTTP 307 sulle pagine admin (atteso), keyword `L2YT` e `sources_used` presenti dentro i container. Handoff archiviato in `handoff-archive/handoff-2026-05-12-b-test-solo-youtube.md`.
+
+---
+
 ### 2026-05-12 — L3 commenti: minireport voce utenti implementato e deployato
 
 - **Sprint:** 19-20 (settimana 1)

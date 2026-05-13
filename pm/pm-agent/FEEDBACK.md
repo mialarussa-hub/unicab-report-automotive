@@ -48,6 +48,32 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-13 — [Code → PM] — L2YT implementato e deployato ✅ (handoff-b archiviato)
+
+Handoff `handoff-2026-05-12-b-test-solo-youtube.md` completato e spostato in `handoff-archive/`. Esito ✅ pieno per la parte tecnica (acceptance criteria 1 e 5 — implementazione del flusso parallelo + integrazione Anteprime). I criteri 2, 3, 4 (scelta modelli + lancio scrape + minireport a confronto) li esegue **direttamente Ale in produzione** — decisione esplicita 2026-05-13: «il confronto lo farò io, a te non interessa quali modelli».
+
+**Cosa è successo:**
+- Introdotto **L2YT** come secondo flusso permanente parallelo a L2 (decisione strutturale Ale 2026-05-13). Naming `L2YT` coerente: `phase_filter`, dropdown UI, badge sessione, etichetta nel prompt L2. L2 standard intatto (8 testate + 4 YouTube ed.).
+- Backend: nuova entry in `PHASE_SOURCE_TYPES`, threshold MIN_MATCHES = 1, validazione phase estesa.
+- Scrapers: `analyze_l2_media_synthesis()` ora riceve `sources_used` e adatta automaticamente l'intro del prompt: quando contiene solo `{"youtube_editorial"}`, il prompt dichiara onestamente di lavorare su trascrizioni video + commenti video, senza citare testate scritte assenti (regola di non-invenzione).
+- Frontend: dropdown admin con opzione "Solo L2YT — YouTube editoriali", badge "L2YT YouTube" rosso tenue, helper `_normalizePhaseForRender()` perché L2YT cada sotto la sezione L2 nel render risultati (i source_type restano `youtube_editorial`), banner motore filter funziona allo stesso modo.
+
+**Commit di riferimento:** `2cd74fc` (codice + deploy) + commit successivo `chore(pm): chiusura task L2YT` (con questo file e SPRINT/DONE aggiornati).
+
+**Deploy in prod 2026-05-13:** `git pull` + `docker compose build scrapers` (no bind-mount) + `docker compose up -d --force-recreate api scrapers` (api ha bind-mount, force-recreate per reload) + `restart nginx` (cache IP container). Verifica: tutti i container `Up`, logs puliti, HTTP 307 sulle pagine admin (atteso), keyword presenti dentro i container.
+
+**Come si lancia un L2YT in futuro (per riferimento PM):**
+- Da UI admin "Test Scraping" → dropdown Fase → **"Solo L2YT — YouTube editoriali"** → brand + modello → Avvia.
+- Da API: `POST /api/scraping-test/run` con `{"brand": "...", "model": "...", "phase": "L2YT"}` (richiede cookie sessione admin).
+
+**Follow-up nice-to-have (non bloccante):** bottone "rilancia L2YT" partendo da una sessione L2 esistente, per ri-eseguire la sintesi sui soli items `youtube_editorial` già scrapati senza ri-pagare uno scrape. Analogo al follow-up emerso per L3 il 12/5.
+
+**SPRINT.md aggiornato**: P0 L2YT ✅. Restano per oggi/domani: P0 c (L4 disegno — Ale), P1 d (scheda Prestazioni — Ale).
+
+**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+
+---
+
 ### 2026-05-12 — [Code → PM] — L3 commenti chiuso ✅ (handoff-a archiviato)
 
 Handoff `handoff-2026-05-12-a-l3-ground-truth.md` completato e spostato in `handoff-archive/`. Esito ✅ pieno: ground-truth + implementazione + deploy + test riuscito.

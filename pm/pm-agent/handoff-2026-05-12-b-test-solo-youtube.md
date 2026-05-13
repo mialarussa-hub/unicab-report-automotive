@@ -5,7 +5,7 @@
 **A:** Claude Code
 **Priorità:** P0
 **Stima rough:** M (1-4h)
-**Stato:** 🆕 Nuovo
+**Stato:** ✅ Chiuso 2026-05-13 (codice + deploy)
 
 ---
 
@@ -107,19 +107,44 @@ per leggibilità).
 
 ---
 
-## 📤 Esito (da compilare da Claude Code a fine task)
+## 📤 Esito (compilato da Claude Code 2026-05-13)
 
-**Esito:** ✅ / ❌
+**Esito:** ✅ (parte tecnica completa). Il **confronto sui 1-2 modelli** (acceptance criteria 2, 3, 4) lo esegue Ale direttamente in produzione — decisione Ale 2026-05-13: «il confronto lo farò io, a te non interessa quali modelli».
+
 **Cosa è stato fatto:**
-- ...
+- **L2YT introdotto come flusso parallelo a L2** (requisito strutturale): nuova entry `"L2YT": {"youtube_editorial"}` in `PHASE_SOURCE_TYPES`, threshold `PHASE_MIN_MATCHES["L2YT"] = 1`, validazione phase estesa. L2 standard intatto (acceptance criterion 1: ✅).
+- **Selezionabile da UI admin** "Test Scraping" → dropdown Fase → "Solo L2YT — YouTube editoriali". Lanciabile anche via API: `POST /api/scraping-test/run` con `{"brand": "...", "model": "...", "phase": "L2YT"}`.
+- **Minireport L2 auto-adattivo:** `analyze_l2_media_synthesis()` riceve ora `sources_used` (insieme dei source_type effettivamente presenti). Quando contiene solo `{"youtube_editorial"}`, l'introduzione del prompt cambia per dichiarare onestamente di lavorare solo su trascrizioni video editoriali + commenti utenti — niente fake-testate-scritte.
+- **Anteprime già pronto:** i source_type `youtube_editorial` restano e cadono naturalmente nella sezione L2 via `getLevel()` (acceptance criterion 5 ✅). Il badge della sessione mostra distintamente `L2YT YouTube` (rosso tenue, classe CSS `phase-l2yt`) per riconoscere a colpo d'occhio le sessioni L2YT vs L2. Il `phase_filter` nel DB viene salvato come "L2YT".
+- Naming `L2YT` coerente ovunque: source_type non cambia (rimane `youtube_editorial`, è il sottoinsieme di L2), ma `phase_filter`, label UI dropdown, label badge, classe CSS, etichetta nel prompt — tutti `L2YT` (acceptance criterion: rispettato).
 
-**File modificati:**
-- ...
+**Come lanciare un L2YT in futuro:**
+- Da UI admin: scraping-test → Fase → "Solo L2YT" → Avvia
+- Da API: `curl -X POST .../api/scraping-test/run -H "Content-Type: application/json" -d '{"brand":"BMW","model":"Serie 3","phase":"L2YT"}'` (con cookie di sessione admin)
 
-**Commit:** `<hash>` _o_ "non committato, vedi diff"
+**File modificati (8):**
+- `backend/app/api/scraping_test.py` (PHASE_SOURCE_TYPES + MIN_MATCHES + validazione + docstring ScrapeTestRequest)
+- `backend/app/models/scraping.py` (solo commento phase_filter, campo già `String(10)` capiente)
+- `scrapers/src/test_scrape.py` (calcolo `l2_sources_used` e pass alla synthesis)
+- `scrapers/src/content_cleaner.py` (signature `analyze_l2_media_synthesis` + intro condizionale)
+- `frontend/templates/scraping_test.html` (option L2YT nel dropdown)
+- `frontend/static/js/scraping_test.js` (`PHASE_BADGES.L2YT` + helper `_normalizePhaseForRender`)
+- `frontend/static/js/scraping_render.js` (`PHASE_BADGES.L2YT` + helper + applicazione nei 2 punti rendering/banner)
+- `frontend/static/css/style.css` (classe `.phase-badge.phase-l2yt` rosso tenue)
+
+**Commit:** `2cd74fc` (branch `claude/flamboyant-bohr-cb95ff` → merged in `main`).
+
+**Deploy:** 2026-05-13 in produzione. `git pull` + `docker compose build scrapers` + `docker compose up -d --force-recreate api scrapers` + `restart nginx`. Verifica post-deploy: tutti i container `Up`, logs puliti (no traceback), `curl /frontend/scraping-test` e `/frontend/anteprime` → HTTP 307 (atteso, redirect login), keyword `L2YT` presente 5 volte in `scraping_test.py` dentro il container api, `sources_used` presente 3 volte in `content_cleaner.py` dentro il container scrapers.
+
+**Vincoli rispettati:**
+- L2 standard non rimosso/disabilitato: continua a funzionare identico (PHASE_SOURCE_TYPES["L2"] invariato).
+- Whisper non forzato: usa cache esistente quando i video sono già trascritti.
+- Naming coerente: una sola variante `L2YT` ovunque.
+- Nessun ADR aperto su scope L2.
 
 **Note per il PM:**
-- ...
+- L'L3 cross-import continua a girare anche per sessioni L2YT: i commenti dei video editoriali confluiscono in `l3_synthesis` se ≥ 10. È coerente con il design (una L2YT può produrre voce-utenti dei 4 canali editoriali come bonus), ma se in call Paolo vedete un mini-L3 dentro una sessione L2YT non è un bug.
+- Test live: Ale annuncerà lui il modello/risultato in call.
 
 **Follow-up emersi:**
-- ...
+- (nice-to-have, non bloccante) Bottone "rilancia L2YT" partendo da una sessione L2 esistente — riusa gli items `youtube_editorial` già scrapati per rigenerare solo la synthesis senza ri-pagare lo scrape. Analogo al follow-up "rigenera report L3" già emerso per L3.
