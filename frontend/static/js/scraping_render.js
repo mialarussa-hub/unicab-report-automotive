@@ -494,7 +494,7 @@ function createSourceCard(source, brandName = '') {
                     <span class="source-primary-badge">Scheda principale</span>
                     <span class="source-primary-sub">${escapeHtml(primaryItem.url || '')}</span>
                 </div>
-                ${renderOfficialInfo(primaryItem.ai_official_info)}
+                ${renderOfficialInfo(primaryItem.ai_official_info, restItems)}
             `;
             card.appendChild(primary);
         }
@@ -635,7 +635,79 @@ function renderAiComments(comments) {
     return html;
 }
 
-function renderDriverAnalysis(info) {
+// Aggrega prestazioni / consumi / dimensioni dagli items L1 sito brand (le pagine
+// non-driver-analysis) per alimentare l'evidence-block della card "Prestazioni &
+// Piacere di guida". Dedup per (versione, alimentazione, cilindrata_cc): pagine
+// diverse del sito brand possono ripetere la stessa versione, evitiamo doppioni.
+function _collectPerformanceEvidence(items) {
+    const versioniMap = new Map();
+    const consumiMap = new Map();
+    let pesoKg = null;
+    let autonomiaMaxKm = null;
+    for (const item of (items || [])) {
+        const oi = item.ai_official_info || item.official_info || {};
+        for (const p of (oi.prestazioni_per_versione || [])) {
+            const k = `${p.versione || ''}|${p.alimentazione || ''}|${p.cilindrata_cc || ''}`;
+            const hasNumbers = p.cv != null || p.kw != null || p.coppia_nm != null
+                || p.zero_cento_s != null || p.velocita_max_kmh != null;
+            if (hasNumbers && !versioniMap.has(k)) versioniMap.set(k, p);
+        }
+        for (const c of (oi.consumi_per_versione || [])) {
+            const k = c.versione || '';
+            if (!consumiMap.has(k)) consumiMap.set(k, c);
+            if (c.autonomia_elettrica_km != null) {
+                autonomiaMaxKm = Math.max(autonomiaMaxKm ?? 0, c.autonomia_elettrica_km);
+            }
+        }
+        const dim = oi.dimensioni || {};
+        if (pesoKg == null && dim.peso_kg != null) pesoKg = dim.peso_kg;
+    }
+    return {
+        versioni: [...versioniMap.values()],
+        consumi: [...consumiMap.values()],
+        pesoKg,
+        autonomiaMaxKm,
+    };
+}
+
+function _renderPerformanceEvidence(items) {
+    const evi = _collectPerformanceEvidence(items);
+    if (!evi.versioni.length && evi.pesoKg == null && evi.autonomiaMaxKm == null) {
+        return '';
+    }
+    let html = `<div class="driver-card-perf-evidence">
+        <div class="driver-card-perf-title">Numeri-chiave (dal sito brand)</div>`;
+    if (evi.versioni.length > 0) {
+        html += `<table class="driver-card-perf-table"><thead><tr>
+            <th>Versione</th><th>CV</th><th>kW</th><th>Nm</th><th>0-100</th><th>V.max</th>
+            </tr></thead><tbody>`;
+        for (const v of evi.versioni) {
+            html += `<tr>
+                <td>${escapeHtml(v.versione || '—')}</td>
+                <td>${v.cv ?? '—'}</td>
+                <td>${v.kw ?? '—'}</td>
+                <td>${v.coppia_nm ?? '—'}</td>
+                <td>${v.zero_cento_s != null ? v.zero_cento_s + ' s' : '—'}</td>
+                <td>${v.velocita_max_kmh != null ? v.velocita_max_kmh + ' km/h' : '—'}</td>
+            </tr>`;
+        }
+        html += `</tbody></table>`;
+    }
+    const extras = [];
+    if (evi.pesoKg != null) extras.push(`<span><strong>Peso:</strong> ${evi.pesoKg} kg</span>`);
+    if (evi.autonomiaMaxKm != null) extras.push(`<span><strong>Autonomia WLTP:</strong> ${evi.autonomiaMaxKm} km</span>`);
+    const cvMax = evi.versioni.reduce((m, v) => Math.max(m, v.cv || 0), 0);
+    if (evi.pesoKg != null && cvMax > 0) {
+        extras.push(`<span><strong>Peso/potenza:</strong> ${(evi.pesoKg / cvMax).toFixed(1)} kg/CV</span>`);
+    }
+    if (extras.length > 0) {
+        html += `<div class="driver-card-perf-extras">${extras.join(' &middot; ')}</div>`;
+    }
+    html += `</div>`;
+    return html;
+}
+
+function renderDriverAnalysis(info, items = []) {
     let html = '<div class="official-info driver-analysis">';
 
     html += `<div class="agg-top">
@@ -689,6 +761,9 @@ function renderDriverAnalysis(info) {
             if (canali.length > 0) {
                 const labels = canali.map(x => CANALE_LABELS[x] || x).join(', ');
                 html += `<div class="driver-card-canali">Canali: ${escapeHtml(labels)}</div>`;
+            }
+            if (d.driver === 'prestazioni_guida') {
+                html += _renderPerformanceEvidence(items);
             }
             html += `</div>`;
         }
@@ -762,8 +837,8 @@ function renderAggregateOfficial(info) {
     return html;
 }
 
-function renderOfficialInfo(info) {
-    if (info.is_driver_analysis) return renderDriverAnalysis(info);
+function renderOfficialInfo(info, items = []) {
+    if (info.is_driver_analysis) return renderDriverAnalysis(info, items);
     if (info.is_aggregate) return renderAggregateOfficial(info);
     // Fallback: empty shell (legacy per-item official_info shape is handled in scraping_test.js)
     return `<div class="official-info"><pre>${escapeHtml(JSON.stringify(info, null, 2))}</pre></div>`;

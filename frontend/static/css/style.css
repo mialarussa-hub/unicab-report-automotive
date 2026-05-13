@@ -2102,6 +2102,52 @@ body.show-non-matches .ai-comment.non-match {
     margin-top: 0.4rem;
 }
 
+/* Numeri-chiave prestazionali — visibili sotto la card driver "prestazioni_guida"
+   come evidence tecnica dal sito brand. */
+.driver-card-perf-evidence {
+    margin-top: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+.driver-card-perf-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+}
+.driver-card-perf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    color: #1f2937;
+}
+.driver-card-perf-table th,
+.driver-card-perf-table td {
+    padding: 0.25rem 0.4rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+.driver-card-perf-table th {
+    font-weight: 600;
+    color: #475569;
+    background: #f1f5f9;
+}
+.driver-card-perf-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.driver-card-perf-extras {
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    color: #334155;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.8rem;
+}
+
 .driver-inactive {
     font-size: 0.82rem;
     color: #64748b;
