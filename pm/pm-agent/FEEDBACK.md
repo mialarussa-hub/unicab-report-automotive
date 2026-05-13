@@ -105,6 +105,8 @@ Handoff `handoff-2026-05-12-d-scheda-prestazioni-l1.md` completato e spostato in
 
 **SPRINT.md aggiornato**: P1 scheda Prestazioni ✅. Restano per oggi/domani: P0 c (L4 disegno — Ale).
 
+**Update 2026-05-13 (pomeriggio):** ✅ **Confermato funzionante in prod da Ale** sui modelli che ha testato. Il blocco "Numeri-chiave (dal sito brand)" appare correttamente sotto le citazioni nella card driver Prestazioni quando comunicato.
+
 **Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
 
 ---
@@ -118,6 +120,8 @@ Handoff `handoff-2026-05-12-b-test-solo-youtube.md` completato e spostato in `ha
 - Backend: nuova entry in `PHASE_SOURCE_TYPES`, threshold MIN_MATCHES = 1, validazione phase estesa.
 - Scrapers: `analyze_l2_media_synthesis()` ora riceve `sources_used` e adatta automaticamente l'intro del prompt: quando contiene solo `{"youtube_editorial"}`, il prompt dichiara onestamente di lavorare su trascrizioni video + commenti video, senza citare testate scritte assenti (regola di non-invenzione).
 - Frontend: dropdown admin con opzione "Solo L2YT — YouTube editoriali", badge "L2YT YouTube" rosso tenue, helper `_normalizePhaseForRender()` perché L2YT cada sotto la sezione L2 nel render risultati (i source_type restano `youtube_editorial`), banner motore filter funziona allo stesso modo.
+
+**Update 2026-05-13 (pomeriggio):** ✅ **Confermato funzionante in prod da Ale** che ha lanciato il L2YT su Grande Panda. Dai test L2YT è anche emerso un bug latente sul cap `items_text` (vedi messaggio "Bug fix cap items_text" sopra) — fixato in 2 deploy successivi, ora tutti i contenuti raggiungono il modello.
 
 **Commit di riferimento:** `2cd74fc` (codice + deploy) + commit successivo `chore(pm): chiusura task L2YT` (con questo file e SPRINT/DONE aggiornati).
 
