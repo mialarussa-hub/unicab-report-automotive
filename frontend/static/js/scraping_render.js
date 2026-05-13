@@ -21,8 +21,16 @@ const PHASE_BADGES = {
     all: { label: 'Tutte le fasi', class: 'phase-all' },
     L1: { label: 'L1 Ufficiale', class: 'phase-l1' },
     L2: { label: 'L2 Media', class: 'phase-l2' },
+    L2YT: { label: 'L2YT YouTube', class: 'phase-l2yt' },
     L3: { label: 'L3 Utenti', class: 'phase-l3' },
 };
+
+// L2YT e' una variante di L2 ristretta a youtube_editorial: i source_type
+// restano "youtube_editorial", quindi cadono nel livello L2 per il rendering.
+// La label "L2YT" e' preservata dal badge della sessione.
+function _normalizePhaseForRender(phaseFilter) {
+    return phaseFilter === 'L2YT' ? 'L2' : (phaseFilter || 'all');
+}
 
 const ALIMENTAZIONE_LABEL = {
     benzina: 'Benzina', diesel: 'Diesel', gpl: 'GPL', metano: 'Metano',
@@ -112,7 +120,7 @@ function buildMotoreFilterBanner(data) {
 
     const effective = data.filter_effective || {};
     const perPhase = effective.per_phase || {};
-    const phaseFilter = data.phase_filter || 'all';
+    const phaseFilter = _normalizePhaseForRender(data.phase_filter);
     const phases = phaseFilter === 'all' ? ['L1', 'L2', 'L3'] : [phaseFilter];
 
     const rows = [];
@@ -180,7 +188,7 @@ function renderResultsInto(container, data, fromSession = false) {
     }
 
     const brandName = data.brand || '';
-    const phaseFilter = data.phase_filter || 'all';
+    const phaseFilter = _normalizePhaseForRender(data.phase_filter);
 
     for (const level of LEVELS) {
         if (phaseFilter !== 'all' && phaseFilter !== level.key) continue;

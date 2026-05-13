@@ -1222,10 +1222,11 @@ footer {
     letter-spacing: 0.03em;
     white-space: nowrap;
 }
-.phase-badge.phase-all { background: #e9ecef; color: #555; }
-.phase-badge.phase-l1  { background: #e8edff; color: #1a56db; }
-.phase-badge.phase-l2  { background: #fff3e0; color: #c56000; }
-.phase-badge.phase-l3  { background: #e6f7e6; color: #0a8f2e; }
+.phase-badge.phase-all  { background: #e9ecef; color: #555; }
+.phase-badge.phase-l1   { background: #e8edff; color: #1a56db; }
+.phase-badge.phase-l2   { background: #fff3e0; color: #c56000; }
+.phase-badge.phase-l2yt { background: #ffe2e0; color: #b91c1c; }
+.phase-badge.phase-l3   { background: #e6f7e6; color: #0a8f2e; }
 
 /* Motore filter badge (sulle session cards) */
 .motore-badge {

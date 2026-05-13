@@ -31,7 +31,7 @@ _active_tasks: dict[str, asyncio.Task] = {}
 class ScrapeTestRequest(BaseModel):
     brand: str
     model: str = ""
-    phase: str = "all"  # all, L1, L2, L3
+    phase: str = "all"  # all, L1, L2, L2YT, L3
     alimentazione: str | None = None  # canonical enum or None
     cilindrata: float | None = None   # liters (e.g. 1.0, 1.5) or None
 
@@ -43,11 +43,14 @@ class ScrapeTestRequest(BaseModel):
 PHASE_SOURCE_TYPES = {
     "L1": {"official"},
     "L2": {"news", "perplexity", "youtube_editorial"},
+    # L2YT = variante L2 con solo i canali YouTube editoriali (sottoinsieme di
+    # L2, flusso parallelo permanente — decisione Ale 2026-05-13).
+    "L2YT": {"youtube_editorial"},
     "L3": {"forum", "youtube", "social"},
 }
 
 # Cascade thresholds — minimum matches per phase before degrading the filter
-PHASE_MIN_MATCHES = {"L1": 1, "L2": 2, "L3": 10}
+PHASE_MIN_MATCHES = {"L1": 1, "L2": 2, "L2YT": 1, "L3": 10}
 
 ALIMENTAZIONE_CANONICA = {
     "benzina", "diesel", "gpl", "metano", "elettrico",
@@ -254,7 +257,7 @@ async def run_scraping_test(
     The frontend polls GET /sessions/{id} to track progress in real time.
     """
     # Validate phase
-    phase = request.phase if request.phase in ("all", "L1", "L2", "L3") else "all"
+    phase = request.phase if request.phase in ("all", "L1", "L2", "L2YT", "L3") else "all"
 
     # Validate motore filter
     alim = request.alimentazione if request.alimentazione in ALIMENTAZIONE_CANONICA else None

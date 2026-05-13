@@ -787,7 +787,7 @@ async def analyze_communication_drivers(
 
 L2_MEDIA_SYNTHESIS_PROMPT = """Sei un analista che sintetizza la copertura editoriale media di un modello automobilistico.
 
-Ricevi un pacchetto di contenuti editoriali pubblicati da testate giornalistiche italiane (riviste motori, rubriche motori dei quotidiani, canali YouTube ufficiali delle testate) su {brand} {model}. Ogni elemento include il testo del contenuto editoriale (articolo scritto OPPURE trascrizione automatica del parlato di un video editoriale, riconoscibile dall'URL youtube.com) e, quando disponibili, i commenti utenti pubblicati sotto l'articolo o sotto il video.
+{sources_intro} Ogni elemento include il testo del contenuto editoriale (articolo scritto OPPURE trascrizione automatica del parlato di un video editoriale, riconoscibile dall'URL youtube.com) e, quando disponibili, i commenti utenti pubblicati sotto l'articolo o sotto il video.
 
 COMPITO: produrre un minireport sintetico con tre sezioni distinte.
 
@@ -841,16 +841,40 @@ PACCHETTO ARTICOLI:
 
 async def analyze_l2_media_synthesis(
     items: list[dict], brand: str, model: str,
+    sources_used: set[str] | None = None,
 ) -> dict | None:
     """Generate a synthetic L2 minireport from media articles + user comments.
 
     Single Claude call across all L2 items in the session. Returns a dict with
     `tono_commenti_utenti`, `giornalisti_punti_forza`, `giornalisti_punti_debolezza`.
     None on failure (caller falls back gracefully).
+
+    `sources_used` (opzionale) e' l'insieme dei source_type effettivamente
+    presenti tra gli items (es. {"youtube_editorial"}, {"news",
+    "youtube_editorial"}). Quando contiene solo "youtube_editorial" il prompt
+    si adatta per non menzionare testate scritte assenti — supporta il flusso
+    L2YT senza richiedere un secondo prompt.
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key or not items:
         return None
+
+    # Costruisci una frase introduttiva onesta sulle fonti realmente presenti.
+    if sources_used == {"youtube_editorial"}:
+        sources_intro = (
+            f"Ricevi un pacchetto di contenuti editoriali pubblicati sui canali "
+            f"YouTube ufficiali delle testate italiane (Quattroruote, AlVolante, "
+            f"Motor1 Italia, DriveK) su {brand} {model}. La sessione e' una "
+            f"variante L2YT: solo trascrizioni video editoriali e commenti utenti "
+            f"sotto i video — non sono presenti articoli scritti delle testate."
+        )
+    else:
+        sources_intro = (
+            f"Ricevi un pacchetto di contenuti editoriali pubblicati da testate "
+            f"giornalistiche italiane (riviste motori, rubriche motori dei "
+            f"quotidiani, canali YouTube ufficiali delle testate) su {brand} "
+            f"{model}."
+        )
 
     parts = []
     total_user_comments = 0
@@ -888,6 +912,7 @@ async def analyze_l2_media_synthesis(
 
     base_prompt = L2_MEDIA_SYNTHESIS_PROMPT.format(
         brand=brand, model=model, items_text=items_text,
+        sources_intro=sources_intro,
     )
 
     async def _call_and_parse(prompt_text: str, attempt_label: str) -> tuple[dict | None, str]:

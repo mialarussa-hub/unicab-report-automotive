@@ -207,15 +207,21 @@ async def run_test_scrape(
     # in un minireport unico. 1 chiamata Claude. Le trascrizioni dei video editoriali
     # entrano come `content`, i commenti utenti come `ai_comments` — stessa struttura
     # degli articoli web, la sintesi li tratta uniformemente.
+    # Quando la sessione e' L2YT (solo youtube_editorial) il prompt si auto-adatta
+    # via `sources_used`: niente menzione di testate scritte assenti.
     l2_synthesis = None
     l2_items: list[dict] = []
+    l2_sources_used: set[str] = set()
     for sr in source_results:
         if sr.source_type in ("news", "perplexity", "youtube_editorial") and sr.items:
             l2_items.extend(sr.items)
+            l2_sources_used.add(sr.source_type)
     if l2_items:
         from src.content_cleaner import analyze_l2_media_synthesis
         try:
-            l2_synthesis = await analyze_l2_media_synthesis(l2_items, brand, model)
+            l2_synthesis = await analyze_l2_media_synthesis(
+                l2_items, brand, model, sources_used=l2_sources_used,
+            )
         except Exception as e:
             logger.error(f"L2 synthesis call raised: {e}")
 
