@@ -48,6 +48,34 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-13 — [Code → PM] — Bug fix: cap items_text L2/L3 80k → 600k (recupero punti di debolezza)
+
+Durante i test in prod di L2YT, Ale ha notato un'anomalia importante e l'ha segnalata. Confronto sulla stessa auto (Fiat Grande Panda):
+- **L2 standard 29/04**: 60 risultati, 1722 commenti → minireport con 3 punti di forza, **0 punti di debolezza**, nota metodologica "prevalenza di contenuti informativi sui prezzi"
+- **L2YT oggi**: 16 risultati, 480 commenti → minireport con 4 punti di forza, **3 punti di debolezza** dettagliati
+
+Ipotesi di Ale: «temo che in L2 ci perdiamo qualche scrape e non inseriamo tutti i contenuti trovati nell'elaborazione del report. Possiamo controllare?» — diagnosi corretta al 100%.
+
+**Causa:** in `scrapers/src/content_cleaner.py` c'era un cap di 80 000 char all'`items_text` passato a Claude per L2 (riga 910) e per L3 (riga 1164). Per una sessione L2 a 60 items con `content[:5000]` per articolo + 30 commenti × 300 char + meta, il pacchetto raw è ~540 000 char → 80k cap = solo ~15% del contenuto arrivava al modello, gli ultimi 40+ items venivano scartati prima del prompt. Le prove su strada delle testate di settore (Quattroruote/Motor1), che tipicamente sono iterate dopo le news brand, non venivano mai viste — da qui lo 0 nei punti di debolezza.
+
+**Fix in 2 deploy successivi:**
+1. Primo bump 80k → 300k (commit `bcb716d`): 55% su Grande Panda 60 items.
+2. Secondo bump 300k → 600k (commit `4bcf66c`, dopo feedback diretto di Ale «portalo a 600k, perché ti limiti?»): 100% sulla stessa sessione. Claude Sonnet 4 ha context 200k token = ~800k char, 600k = ~150k token, restano ~43k token di margine per prompt skeleton + output.
+
+**Logging aggiunto:** ogni chiamata L2/L3 logga ora la dimensione effettiva del pacchetto. Quando dentro al cap: `INFO L2 synthesis items_text size: N chars (X items)`. Quando troncato: `WARNING L2 synthesis items_text truncated: N -> 600000 chars`. Se in futuro una sessione esce fuori cap, basta `docker compose logs scrapers | grep "synthesis items_text"` per vederlo.
+
+**Confermato funzionante da Ale in prod** dopo il secondo deploy. I punti di debolezza ora compaiono nel minireport L2 grande.
+
+**Da segnalare in call Paolo:**
+- L'analisi qualitativa dei minireport L2 era stata fino a oggi parzialmente azzoppata dal cap. Il L2 standard del 29/04 su Grande Panda **era artefatto** (mancavano critiche reali presenti nei contenuti raccolti ma non analizzati). Tutte le sessioni L2 con >20 items sono potenzialmente sotto-rappresentate nel minireport pre-fix.
+- Vale la pena rigenerare i minireport delle sessioni L2 grandi storiche se finiranno in demo/anteprime. Follow-up nice-to-have (non bloccante per la call): bottone "rigenera minireport" che riesegue solo la sintesi sui dati già scrapati. Già annotato come follow-up nei task L2YT/L3.
+
+**Reminder operativo:** il fix è in produzione, ma le **sessioni già completate prima del fix** mantengono il loro `l2_synthesis` / `l3_synthesis` vecchio (azzoppato). Solo le nuove sessioni o quelle eventualmente rigenerate beneficeranno del nuovo cap.
+
+**Stato:** 🆕 Aperto (chiudi a ✅ Risolto a lettura)
+
+---
+
 ### 2026-05-13 — [Code → PM] — Scheda Prestazioni chiusa ✅ con scope ridotto (handoff-d archiviato)
 
 Handoff `handoff-2026-05-12-d-scheda-prestazioni-l1.md` completato e spostato in `handoff-archive/`. Esito ✅ con **scope ridotto da decisione esplicita di Ale**.

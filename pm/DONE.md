@@ -20,6 +20,20 @@
 
 ## Log
 
+### 2026-05-13 — Fix: cap items_text L2/L3 alzato da 80k a 600k char (recupero punti di debolezza)
+
+- **Sprint:** 19-20 (settimana 1, follow-up del deploy L2YT)
+- **Esecutore:** Claude Code
+- **Outcome:** Emerso durante i test L2YT di Ale: confronto L2 standard (60 risultati Grande Panda, 29/04) vs L2YT (16 risultati, oggi) → L2 standard produceva **0 punti di debolezza** mentre L2YT con MENO contenuti ne trovava 3. Diagnosi: cap a 80 000 char nell'`items_text` passato a Claude in `analyze_l2_media_synthesis` (e analogamente in `analyze_l3_user_synthesis`) tagliava il ~85% del pacchetto su sessioni grandi — gli ultimi 40+ items L2 venivano scartati prima di arrivare al modello. Le prove su strada con critiche, presenti nelle testate di settore per ordine di iterazione (Quattroruote/Motor1 dopo le news brand), non venivano mai analizzate.
+- **Fix in 2 step:**
+  - Primo bump 80k → 300k (commit `bcb716d`): 55% del contenuto su Grande Panda 60 items.
+  - Secondo bump 300k → 600k (commit `4bcf66c`, dopo feedback Ale): 100% del contenuto sulla stessa sessione. Claude Sonnet 4 ha context 200k token (~800k char), 600k = ~150k token → ~43k token di margine per prompt skeleton + output (max 6k).
+- **Logging aggiunto:** ogni chiamata L2/L3 ora logga la dimensione effettiva del pacchetto (`INFO L2 synthesis items_text size: N chars (X items)`). Quando si tronca: `WARNING L2 synthesis items_text truncated: N -> 600000`. Permette di vedere subito in `docker compose logs scrapers` se future sessioni mostre escono fuori cap.
+- **Conferma in prod:** Ale ha rilanciato L2 standard dopo il fix, i punti di debolezza ora compaiono. 2 deploy successivi (build scrapers + force-recreate + restart nginx).
+- **Note / link:** commit `bcb716d` + `4bcf66c` (entrambi su `main`). File modificato: `scrapers/src/content_cleaner.py`.
+
+---
+
 ### 2026-05-13 — Scheda Prestazioni in L1: numeri-chiave come evidence nella card driver
 
 - **Sprint:** 19-20 (settimana 1)
