@@ -1,7 +1,10 @@
 -- Voci timesheet per il lavoro del 2026-05-13.
 -- INSERT eseguito via psql diretto in prod, questo file resta come
 -- traccia storica del testo definitivo in DB.
--- ID generati al momento dell'INSERT (vedi commit successivo per riempire).
+-- Le 3 voci sono già in produzione:
+--   id 52b2b850-298f-4ab7-9d64-5d58e8420d2f (development, 2.5h — L2YT)
+--   id 88e8565a-1082-4aa1-a574-ea7e2df6f51b (development, 1.5h — scheda Prestazioni)
+--   id 67bc4746-aeb1-42a0-80d6-e3e2526e48e2 (development, 1.0h — fix cap items_text)
 
 INSERT INTO activities (activity_date, description, hours, category, created_by) VALUES
   (
