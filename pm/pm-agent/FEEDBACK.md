@@ -48,6 +48,49 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-14 — [PM → Code] — 🛑 Post-call Paolo: progetto in STAND-BY ~2 settimane + nuovo scope L2/L3/L4
+
+Sintesi telegrafica di cosa è successo nella call Paolo delle 15:30 oggi (durata 33 min). Meeting note integrale in `pm/sources/UNICAB_meeting_2026-05-14.md` — leggilo a inizio prossima sessione.
+
+**1) STAND-BY operativo ~2 settimane.** Paolo ha esplicitato di non riuscire a dedicare attenzione al progetto per ragioni personali. Riavvio stimato fine maggio / inizio giugno, a sua discrezione. Decisione esplicita di Ale: **"ce ne stiamo in standby"**. Quindi:
+- ❌ NIENTE esecuzione tecnica nei prossimi ~14 giorni (no nuovi handoff, no deploy, no test in prod)
+- ✅ Se Ale apre una sessione Code "per fare qualcosa", lavora come al solito, ma non scattare di tua iniziativa
+- ✅ Fatturazione attivata: appena arriva email Paolo con intestazione "l'altra società", Ale emette prima fattura con ore svolte finora (pagamento entro fine maggio 2026)
+
+**2) Scope cut su L2/L3/L4 — decisione strategica Paolo.** Sorgenti dati ristrette a **YouTube + Google Ads only**. Tagliati:
+- Reddit (esempio in call: thread Grande Panda vs Sandero, segmenti diversi, scraper recepiva il confronto come valido → commenti viziati)
+- 8 testate scritte L2 (Quattroruote/AlVolante/Motor1.it/Corriere Sera Motori/Corriere Sport Motori/Repubblica/Gazzetta/La Stampa)
+- Perplexity trade press (MediaKey/Engage/ADCMagazine/etc. che era nello scope L4 v1)
+- **Facebook Ads Library** (era nello scope L4 v1!) — solo Google Ads
+- Razionale Paolo: YouTube concentra i 4-5 editori auto italiani, applica selezione editoriale naturale, fonti uniformi = MVP più solido
+
+**3) Task post-stand-by (NON esecutori adesso, fissati per quando ripartiamo).** Ho aggiornato `pm/SPRINT.md`. Sintesi:
+
+| Task | Note essenziali |
+|---|---|
+| **L4 Google Ads** — test fattibilità + disegno | Solo Google Ads. Output = (a) n. creatività ultimi 6 mesi, (b) continuità temporale, (c) timeline campagne. NIENTE spend €, messaggio chiave, affissioni. Caveat Paolo: timeline da testare empiricamente; se troppo onerosa, scope si rinegozia. |
+| **L3 conteggi quantitativi** | Aggiungere al minireport L3 misura di quanti commenti ricadono in ogni categoria (sentiment/forza/debolezza). Richiesta esplicita Paolo: senza conteggio, 1 commento sfortunato = pattern diffuso (esempio call: "motore inaffidabile su 7/10 vs 1/10"). |
+| **Convergenza L2YT → L2** | Decisione Ale 14/5: rinominiamo L2YT in L2 ma **NON buttiamo via** il lavoro accumulato su testate scritte (8 testate integrate, prompt 2-step search→scrape, gotchas tipo `tbs=qdr:y`, dedup per `video_id`, ecc.). Ti chiedo di **proporre tu** il modo migliore di archiviare: branch dedicato `legacy/l2-multifonte`? Cartella `scrapers/src/legacy/` con readme? Doc dettagliato in `pm/decisions/ADR-NNN-l2-youtube-only.md`? Decisione su Ale al momento dell'esecuzione. |
+| **Emissione prima fattura** | In attesa email Paolo con intestazione "l'altra società". Quando arriva, Ale emette fattura con ore svolte finora. |
+
+**4) Task cancellati post-call:**
+- ❌ `handoff-2026-05-14-a-anomalia-l2-vs-l2yt-prompt.md` — obsoleto. Con L2 = L2YT (YouTube-only), il delta che si voleva diagnosticare si annulla per costruzione. **Quando hai tempo (post-stand-by), archivialo in `handoff-archive/` con nota "❌ Cancellato 2026-05-14 post-call Paolo: superseded da decisione scope YouTube-only".** Niente esecuzione richiesta.
+- ❌ Scope L4 v1 (FB Ads Library + Google Ads Transparency + Perplexity trade press) — superseded.
+
+**5) Onestà tecnica con Paolo — fatta.** Il bug cap items_text 80k→600k (commits `bcb716d` + `4bcf66c`) è stato comunicato in call come "onestà tecnica" e Paolo l'ha preso bene. Lui ha visto Grande Panda dopo fix con punti di debolezza completi → ratifica del fix.
+
+**6) Cosa NON fare durante lo stand-by:**
+- Niente rifattorizzazione preventiva delle 8 testate scritte L2 (aspettiamo decisione finale convergenza)
+- Niente smantellamento codice Perplexity in L1 Strato B — **L1 resta intatto**, lo scope cut riguarda solo L2/L3/L4
+- Niente touch a Reddit dispatcher — anche se Reddit è fuori scope L3, non smantellare ora (Ale può decidere diversamente alla ripartenza)
+- In generale: **conservativo, no demolizioni**
+
+**7) Knowledge nugget rilevante per il tuo lavoro futuro** (dalla call, anche se ovvio): le ricerche YouTube vanno verificate per qualità commenti post-restrizione delle sorgenti (è nella tabella "punti aperti" del meeting note). Quando ripartiremo, varrà la pena un sanity check del filtro spam su un campione di modelli, prima di promuovere il minireport.
+
+**Stato:** 🆕 Aperto (resta aperto durante lo stand-by; lo chiuderai/archivierai quando ripartiremo e i task post-stand-by entreranno in esecuzione)
+
+---
+
 ### 2026-05-14 — [PM → Code] — Riepilogo lavoro PM mattina 14/5 + entry per timesheet
 
 Sintesi delle attività PM di stamattina per allineamento (sessione Cowork Ale + PM AI, ~9:00 – ~11:00, ~2h). Nessun handoff esecutivo aperto — l'esecuzione tecnica L4 è stata esplicitamente differita post-call Paolo.

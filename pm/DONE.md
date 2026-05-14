@@ -20,6 +20,24 @@
 
 ## Log
 
+### 2026-05-14 — Call Paolo 15:30 — progetto in stand-by ~2 settimane + scope cut su L2/L3/L4
+
+- **Sprint:** 19-20 (settimana 1, giovedì)
+- **Esecutore:** Ale (call) + PM AI (sintesi/aggiornamenti)
+- **Outcome:** Call di 33 min in clima cordiale. **Progetto in stand-by ~2 settimane** per ragioni personali di Paolo (riavvio fine maggio / inizio giugno). Ale resta operativo in background, Paolo accede via login se serve. Decisioni di scope chiave:
+  - **L2/L3/L4 → YouTube + Google Ads only**. Tagliate: Reddit, testate scritte L2 (Quattroruote/AlVolante/Motor1/Corriere/Repubblica/etc.), Perplexity trade press, Facebook Ads Library. Razionale: YouTube concentra naturalmente i 4-5 editori auto italiani + applica selezione editoriale automatica + Reddit produce commenti viziati (esempio in call: Sandero confusa come competitor di Grande Panda, segmenti diversi).
+  - **L4 scope ridotto**: solo (a) n. creatività ultimi 6 mesi, (b) continuità temporale, (c) timeline. Niente spend €, niente messaggio chiave, niente affissioni. Caveat: timeline da testare empiricamente, se troppo onerosa si rinegozia.
+  - **L3 deve diventare quantitativo**: aggiungere conteggi commenti per categoria (es. "motore inaffidabile su 7/10 vs 1/10"). Senza conteggio, 1 commento sfortunato è equivalente a un pattern diffuso.
+  - **L1 Prestazioni** compilazione condizionale **ratificata da Paolo** (scope ridotto deciso da Ale il 13/5 → confermato).
+  - **Ibrido "a sola ricarica" / generatore termico** in stand-by (nomenclatura non standard tra costruttori).
+  - **"Assenza di dati è un dato"**: se YouTube non trova editoriali su un modello (esempio call: DR Evo 5), è informazione valida ("auto editorialmente trascurata, vende solo sul prezzo"). Non un fallimento dello scraping.
+  - **L2YT diventerà L2** (rename + archiviazione know-how testate scritte, non buttare il lavoro fatto). Da fare post-stand-by.
+- **Fatturazione attivata**: Paolo manda via email l'intestazione "l'altra società"; Ale emette prima fattura con ore svolte finora; pagamento entro fine maggio 2026.
+- **Pending Paolo**: numero auto prototipo (dataset immatricolazioni — "ultima cosa") + intestazione fatturazione + verifica nomenclatura ibridi su dataset Quattroruote.
+- **Note / link:** meeting note completo in `pm/sources/UNICAB_meeting_2026-05-14.md`. Doc prep call (`pm/projects/2026-05-14-prep-call-paolo.docx`) usato come scaletta, scope L4 v1 disegnato in mattinata (FB Ads + Google + Perplexity trade press) **superato** dalla decisione di Paolo (solo Google Ads).
+
+---
+
 ### 2026-05-13 — Fix: cap items_text L2/L3 alzato da 80k a 600k char (recupero punti di debolezza)
 
 - **Sprint:** 19-20 (settimana 1, follow-up del deploy L2YT)
