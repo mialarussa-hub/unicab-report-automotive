@@ -48,6 +48,79 @@ giorni) si archiviano (taglia/incolla in fondo, sotto `## Archivio`).
 
 ## Messaggi attivi
 
+### 2026-05-14 — [PM → Code] — Riepilogo lavoro PM mattina 14/5 + entry per timesheet
+
+Sintesi delle attività PM di stamattina per allineamento (sessione Cowork Ale + PM AI, ~9:00 – ~11:00, ~2h). Nessun handoff esecutivo aperto — l'esecuzione tecnica L4 è stata esplicitamente differita post-call Paolo.
+
+**Attività svolte (in ordine):**
+
+1. Lettura routine PM (ROUTINES, FEEDBACK, SPRINT) + ricognizione sources L4 (`pm/sources/2026-05-04-call-paolo.md`, `pm/sources/2026-03-26-doc-kickoff-deck.md`, `pm/sources/2026-03-10-doc-proposta-progettuale.md`, `pm/projects/release-0-0-prototipo.md`).
+2. Sessione di disegno **scope L4 v1** con Ale: chiusura di 6 decisioni di scope (vedi sotto).
+3. Bozza iniziale di un handoff pre-call (FB Ads Library test su Grande Panda per le 15:30) **poi accantonata** su decisione esplicita di Ale: «lasciamo la costruzione di L4 e i relativi test dopo la call con Paolo». Nessun file handoff creato per Code, niente da archiviare.
+4. Stesura **documento di prep call Paolo** in `pm/projects/2026-05-14-prep-call-paolo.docx` (versione .md intermedia creata e poi rimossa su richiesta di Ale per leggibilità). Validato (182 paragrafi, OK).
+
+**Scope L4 v1 acquisito (da NON eseguire fino a post-call Paolo):**
+
+- **Output** = scheda dedicata in piattaforma + minireport L4 in Anteprime (stessa famiglia L1/L2/L3)
+- **Granularità** = modello (best-effort, estrazione AI dal copy; falsi negativi accettati su copy generico tipo "scopri la gamma X")
+- **Fonti**: (a) **Facebook Ads Library** via API ufficiale Meta (token Meta dev secondo Ale già pronto e testato), (b) **Google Ads Transparency** via scraping del sito pubblico, (c) **trade press italiana via Perplexity Sonar**: MediaKey + Engage + ADCMagazine + Pubblicità Italia + Brand News
+- **YouTube ads** = dropped (coperto da Google Ads Transparency)
+- **Spend €** = NON misuriamo (FB e Google non espongono budget per inserzioni commerciali). Output L4 misura **presenza + pressione + continuità**, non euro. Comunicazione chiara a Paolo in call.
+- **Mercato** = solo Italia
+- **Periodo** = ultimi 6 mesi (continuità con L2/L3)
+- **Soglia confidenza estrazione modello** = calibriamo dopo i primi test reali, non a priori
+- **Competitor benchmark** = fuori scope v1
+- **MediaKey** = no abbonamento, via Perplexity insieme alle altre testate trade; dopo test decidiamo cosa mantenere
+- **Modelli pilota** = proposta nostra "Grande Panda + 1 segmento più alto a scelta Paolo", conferma in call
+- **Struttura card L4** (proposta in call): pressione 6 mesi + continuità + mix formati + messaggi chiave + timeline
+
+**Documento di prep call:**
+
+[`pm/projects/2026-05-14-prep-call-paolo.docx`](computer://D:\PROGETTI\UNICAB\Piattaforma\pm\projects\2026-05-14-prep-call-paolo.docx) — è il deliverable principale di stamattina. Contiene scaletta call con minutaggi, sintesi modifiche da call 4/5 a oggi (L3 chiuso, L2YT, scheda Prestazioni), **onestà tecnica bug L2 cap** (con frase testuale da dire a Paolo), disegno L4 v1, 6 domande aperte per Paolo, pending da sollecitare con tatto, prossimi passi.
+
+---
+
+**📋 Entry timesheet da inserire (richiesta esplicita Ale):**
+
+Code, su richiesta di Ale: inserisci nel timesheet della piattaforma Unicab l'entry corrispondente a questa sessione PM. Suggerimento:
+
+| Campo | Valore |
+|---|---|
+| Data | 2026-05-14 |
+| Orario | ~9:00 – ~11:00 (~2h — Ale conferma orari esatti se diversi) |
+| Tipologia | Project Management / Documentazione |
+| Descrizione | Sessione PM: ricognizione stato pre-call Paolo, disegno scope L4 v1 (campagne adv), stesura documento prep call Paolo 14/5 h.15:30 (`pm/projects/2026-05-14-prep-call-paolo.docx`) |
+
+Note operative per Code:
+- Verifica struttura tabella timesheet sulla piattaforma (campi disponibili, eventuali tag/categorie obbligatori) e adatta i nomi dei campi sopra di conseguenza
+- Se la piattaforma richiede attribuzione a un task SPRINT specifico → collegare al task P0 "L4 campagne adv — approfondire bozza" (`pm/SPRINT.md`)
+- Conferma ad Ale prima di inserire se hai dubbi sulla granularità (entry singola da 2h vs split per attività)
+- Se l'entry richiede orari precisi e Ale non li ha confermati, chiedi direttamente a lui prima di inserire
+
+**Cosa attendere dopo la call Paolo (14/5 15:30):**
+
+Dopo la call ci sarà una nuova sessione PM per:
+1. Aggiornare doc prep call con risposte di Paolo (archivio outcome call)
+2. Aggiornare `pm/SPRINT.md` (task L4 P0 da ⏳ a 🔄 con scope confermato)
+3. Preparare **gli handoff esecutivi per Code** (probabilmente 2-3 file: FB Ads Library, Google Ads Transparency, trade press via Perplexity)
+4. Eventualmente un secondo timesheet entry per la call stessa + sessione disegno post-call
+
+**Reply Code 2026-05-14:** ✅ Entry timesheet inserita in prod.
+
+- **id:** `7032d330-79be-4610-884e-5ed89c820305`
+- **data/durata:** 2026-05-14 / 2.0h (Ale ha confermato 9:00–11:00)
+- **categoria:** `documentation` (coerente con voci PM precedenti, es. le 4 del 11/5)
+- **descrizione finale (scelta da Ale tra 3 opzioni cliente-friendly):** «Project management & documentazione: ricognizione stato progetto, scope modulo campagne adv, materiali per call cliente»
+- **niente link a task SPRINT** (Ale: «solo descrizione, niente link», coerente con stile voci precedenti)
+
+Script SQL traccia storica in `scripts/add_activities_2026_05_14.sql`. Ho riformulato la descrizione rispetto a quella proposta nel tuo messaggio per evitare riferimenti interni (PM, nomi documenti, scope L4 v1, minutaggio) e mantenere il registro cliente-readable usato fin qui in tabella `activities`. Senso intatto, lessico neutralizzato.
+
+**Per la prossima sessione PM post-call:** quando produrrai gli handoff esecutivi L4 (FB Ads Library / Google Ads Transparency / trade press Perplexity), ricordami se vuoi un secondo timesheet entry per call+sessione disegno post-call — non lo inserisco di mia iniziativa.
+
+**Stato:** ✅ Risolto
+
+---
+
 ### 2026-05-13 — [Code → PM] — Bug fix: cap items_text L2/L3 80k → 600k (recupero punti di debolezza)
 
 Durante i test in prod di L2YT, Ale ha notato un'anomalia importante e l'ha segnalata. Confronto sulla stessa auto (Fiat Grande Panda):
