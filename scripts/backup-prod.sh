@@ -26,9 +26,9 @@ mkdir -p "${BKDIR}"
 
 set -a; source .env; set +a
 
-echo "[1/5] pg_dump del DB ${POSTGRES_DB}..."
+echo "[1/4] pg_dump del DB ${POSTGRES_DB}..."
 docker compose exec -T db pg_dump -U "${POSTGRES_USER}" -Fc -d "${POSTGRES_DB}" \
-  > "${BKDIR}/postgres.dump"
+  < /dev/null > "${BKDIR}/postgres.dump"
 DB_DUMP_SIZE=$(du -h "${BKDIR}/postgres.dump" | cut -f1)
 echo "    dump: ${DB_DUMP_SIZE}"
 
@@ -44,7 +44,7 @@ fi
 
 echo "[3/4] manifest..."
 DB_SIZE=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc \
-  "SELECT pg_size_pretty(pg_database_size('${POSTGRES_DB}'));" 2>/dev/null || echo "n/a")
+  "SELECT pg_size_pretty(pg_database_size('${POSTGRES_DB}'));" </dev/null 2>/dev/null || echo "n/a")
 {
   echo "# UNICAB backup ${TS}"
   echo ""
@@ -65,7 +65,7 @@ DB_SIZE=$(docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB
   echo "db_dump_size: ${DB_DUMP_SIZE}"
   echo ""
   echo "## Container snapshot"
-  docker compose ps --format 'table {{.Service}}\t{{.Image}}\t{{.Status}}' 2>/dev/null || true
+  docker compose ps --format 'table {{.Service}}\t{{.Image}}\t{{.Status}}' </dev/null 2>/dev/null || true
 } > "${BKDIR}/MANIFEST.txt"
 
 echo "[4/4] tarball finale + checksum..."
