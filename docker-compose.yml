@@ -23,8 +23,10 @@ services:
     build: ./backend
     restart: unless-stopped
     env_file: .env
+    # Solo loopback: l'app è pubblica via nginx (443 -> proxy_pass http://api:8000).
+    # Pubblicare 8000 su 0.0.0.0 bypasserebbe il TLS senza aggiungere nulla.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -49,8 +51,9 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    # Solo loopback: n8n è pubblico via nginx (443 -> proxy_pass http://n8n:5678).
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     depends_on:
       db:
         condition: service_healthy
