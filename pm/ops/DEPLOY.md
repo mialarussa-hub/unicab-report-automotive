@@ -143,3 +143,16 @@ locale dev → commit → push (operazione safe).
 - **Credentials DB**: `POSTGRES_USER=unicab`, `POSTGRES_DB=unicab`. Password
   in `/opt/unicab/.env` (gitignored). Per psql one-shot da SSH:
   `docker compose exec -T db psql -U unicab -d unicab -c "..."`
+
+- **Porte legate a loopback (security, dal 2026-07-02).** In prod `db` (5432),
+  `api` (8000) e `n8n` (5678) sono pubblicate solo su `127.0.0.1`, non su
+  `0.0.0.0` (vedi INCIDENTS 2026-07-02: erano esposte su Internet, segnalate
+  da BSI/CERT-Bund). Le uniche porte pubbliche restano **80/443** su nginx.
+  - Il DDL via `docker compose exec -T db psql ...` **non è impattato** (gira
+    dentro il container, non usa la porta pubblicata).
+  - Per accedere al DB/api/n8n con un client sull'host o dal proprio PC usare
+    un **SSH tunnel**, es.:
+    `ssh -p 2222 -L 5432:127.0.0.1:5432 unicab@46.225.147.176`
+    (poi il client si connette a `localhost:5432`). Analogo per 8000/5678.
+  - ⚠️ Non ripristinare mai il mapping `"5432:5432"` (o 8000/5678 su `0.0.0.0`):
+    Docker bypassa UFW, quindi la porta tornerebbe pubblica anche col firewall.
